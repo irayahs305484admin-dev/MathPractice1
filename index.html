@@ -4,52 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Math Practice Pro</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-            color: #1f2937;
-        }
-        .fraction-line {
-            border-bottom: 2px solid currentColor;
-        }
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1; 
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
-        }
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
     </style>
 </head>
-<body>
+<body class="bg-gray-100 text-gray-900">
     <div id="root"></div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAVreTA-PDMyZkBQ_tC12E67YgoEP7lJpA",
             authDomain: "mathpractice1-9a4bd.firebaseapp.com",
@@ -61,673 +35,660 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const auth = getAuth(app);
-        
-        // Keep these variables for the platform's specific paths and authentication
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'math-practice-default';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        // Make Firebase available to React
-        window.FirebaseApp = { db, auth, appId, signInAnonymously, signInWithCustomToken, initialAuthToken, collection, addDoc, getDocs };
+        // Make Firebase functions globally available to React
+        window.saveScoreToFirebase = async (scoreData) => {
+            try {
+                await addDoc(collection(db, "math_scores"), scoreData);
+                console.log("Score saved to Firebase!");
+            } catch (e) {
+                console.error("Error saving to Firebase: ", e);
+            }
+        };
+
+        window.getScoresFromFirebase = async () => {
+            try {
+                const q = query(collection(db, "math_scores"));
+                const querySnapshot = await getDocs(q);
+                let scores = [];
+                querySnapshot.forEach((doc) => {
+                    scores.push({ id: doc.id, ...doc.data() });
+                });
+                return scores;
+            } catch (e) {
+                console.error("Error fetching from Firebase: ", e);
+                return [];
+            }
+        };
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
-
-        // Utility: Random Integer
-        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-
-        // --- MATH GENERATORS ---
-
-        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-
-        const generateNoRegroupingAdd = (digits) => {
-            let aStr = '', bStr = '';
-            for (let i = 0; i < digits; i++) {
-                const maxD1 = i === 0 ? 9 : 9;
-                const minD1 = i === 0 ? 1 : 0;
-                const d1 = randomInt(minD1, maxD1);
-                const maxD2 = 9 - d1;
-                const minD2 = i === 0 && d1 === 9 ? 0 : (i===0 ? 1 : 0); // avoid leading zero
-                const d2 = randomInt(Math.min(minD2, maxD2), maxD2);
-                aStr += d1;
-                bStr += d2;
-            }
-            return { a: parseInt(aStr), b: parseInt(bStr) };
-        };
-
-        const generateNoRegroupingSub = (digits) => {
-            let aStr = '', bStr = '';
-            for (let i = 0; i < digits; i++) {
-                const maxD1 = 9;
-                const minD1 = i === 0 ? 1 : 0;
-                const d1 = randomInt(minD1, maxD1);
-                const minD2 = i === 0 ? 1 : 0;
-                const d2 = randomInt(minD2, d1);
-                aStr += d1;
-                bStr += d2;
-            }
-            return { a: parseInt(aStr), b: parseInt(bStr) };
-        };
-
-        const checkAdditionRegrouping = (a, b) => {
-            let strA = a.toString().split('').reverse();
-            let strB = b.toString().split('').reverse();
-            let len = Math.max(strA.length, strB.length);
-            for (let i = 0; i < len; i++) {
-                let d1 = parseInt(strA[i] || 0);
-                let d2 = parseInt(strB[i] || 0);
-                if (d1 + d2 >= 10) return true;
-            }
-            return false;
-        };
-
-        const checkSubtractionRegrouping = (a, b) => {
-            let strA = a.toString().split('').reverse();
-            let strB = b.toString().split('').reverse();
-            let len = Math.max(strA.length, strB.length);
-            for (let i = 0; i < len; i++) {
-                let d1 = parseInt(strA[i] || 0);
-                let d2 = parseInt(strB[i] || 0);
-                if (d1 < d2) return true;
-            }
-            return false;
-        };
-
-        const generateNumber = (digits, regrouping, op) => {
-            if (regrouping === 'no' && op === '+') return generateNoRegroupingAdd(digits);
-            if (regrouping === 'no' && op === '-') return generateNoRegroupingSub(digits);
-            
-            // Standard/Mixed generation
-            const min = Math.pow(10, digits - 1);
-            const max = Math.pow(10, digits) - 1;
-            
-            let a, b;
-            let attempts = 0;
-            do {
-                a = randomInt(min, max);
-                b = randomInt(min, max);
-                
-                if (op === '-' && b > a) {
-                    let temp = a; a = b; b = temp;
-                }
-                
-                // Strictly enforce regrouping if selected
-                if (regrouping === 'yes' && op === '+') {
-                    if (checkAdditionRegrouping(a, b)) break;
-                } else if (regrouping === 'yes' && op === '-') {
-                    if (checkSubtractionRegrouping(a, b)) break;
-                } else {
-                    break; // Mixed regrouping / not applicable
-                }
-                attempts++;
-            } while (attempts < 50);
-
-            return { a, b };
-        };
-
-        const FractionDisplay = ({ num, den, sign = '' }) => (
-            <div className="inline-flex items-center gap-2 mx-1 align-middle text-xl">
-                {sign && <span>{sign}</span>}
-                <div className="flex flex-col items-center leading-tight">
-                    <span className="px-1 border-b-2 border-black w-full text-center">{num}</span>
-                    <span className="px-1 w-full text-center">{den}</span>
-                </div>
-            </div>
-        );
-
-        // Main Generator Router
-        const generateQuestion = (topic, settings) => {
-            const { digits, regrouping, sign, table } = settings;
-
-            if (topic.endsWith('_mixed')) {
-                const ops = ['add', 'sub', 'mul', 'div'];
-                const randomOp = ops[randomInt(0, 3)];
-                const baseTopic = topic.replace('_mixed', `_${randomOp}`);
-                return generateQuestion(baseTopic, settings);
-            }
-
-            // Apply Sign Logic
-            const applySign = (val) => {
-                if (sign === 'positive') return Math.abs(val);
-                if (sign === 'negative') return -Math.abs(val);
-                return randomInt(0, 1) === 0 ? val : -val; // Mixed
-            };
-
-            const formatVal = (v) => v < 0 ? `(${v})` : v;
-
-            switch (topic) {
-                case 'whole_add':
-                case 'int_add': {
-                    const { a, b } = generateNumber(digits, regrouping, '+');
-                    let finalA = topic === 'int_add' ? applySign(a) : a;
-                    let finalB = topic === 'int_add' ? applySign(b) : b;
-                    return {
-                        text: `${formatVal(finalA)} + ${formatVal(finalB)}`,
-                        answer: (finalA + finalB).toString(),
-                        type: 'standard',
-                        displayAnswer: (finalA + finalB).toString()
-                    };
-                }
-                case 'whole_sub':
-                case 'int_sub': {
-                    const { a, b } = generateNumber(digits, regrouping, '-');
-                    let finalA = topic === 'int_sub' ? applySign(a) : a;
-                    let finalB = topic === 'int_sub' ? applySign(b) : b;
-                    return {
-                        text: `${formatVal(finalA)} - ${formatVal(finalB)}`,
-                        answer: (finalA - finalB).toString(),
-                        type: 'standard',
-                        displayAnswer: (finalA - finalB).toString()
-                    };
-                }
-                case 'whole_mul':
-                case 'int_mul': {
-                    let a, b;
-                    if (table === 'mixed') {
-                        const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                        const maxVal = Math.pow(10, digits) - 1;
-                        a = randomInt(minVal, maxVal);
-                        b = randomInt(minVal, maxVal);
-                    } else {
-                        a = parseInt(table);
-                        b = randomInt(1, 12);
-                        if (randomInt(0,1)) { let temp = a; a = b; b = temp; }
-                    }
-                    let finalA = topic === 'int_mul' ? applySign(a) : a;
-                    let finalB = topic === 'int_mul' ? applySign(b) : b;
-                    return {
-                        text: `${formatVal(finalA)} × ${formatVal(finalB)}`,
-                        answer: (finalA * finalB).toString(),
-                        type: 'standard',
-                        displayAnswer: (finalA * finalB).toString()
-                    };
-                }
-                case 'whole_div':
-                case 'int_div': {
-                    let divisor, quotient;
-                    if (table === 'mixed') {
-                        const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                        const maxVal = Math.pow(10, digits) - 1;
-                        divisor = randomInt(minVal, maxVal);
-                        quotient = randomInt(minVal, maxVal);
-                    } else {
-                        divisor = parseInt(table);
-                        quotient = randomInt(1, 12);
-                    }
-                    let finalDivisor = topic === 'int_div' ? applySign(divisor) : divisor;
-                    let finalQuotient = topic === 'int_div' ? applySign(quotient) : quotient;
-                    if(finalDivisor === 0) finalDivisor = 1;
-                    let finalDividend = finalDivisor * finalQuotient;
-
-                    return {
-                        text: `${formatVal(finalDividend)} ÷ ${formatVal(finalDivisor)}`,
-                        answer: finalQuotient.toString(),
-                        type: 'standard',
-                        displayAnswer: finalQuotient.toString()
-                    };
-                }
-                case 'dec_add':
-                case 'dec_sub': {
-                    const op = topic === 'dec_add' ? '+' : '-';
-                    const { a, b } = generateNumber(digits, regrouping, op);
-                    const decPlace = randomInt(1, digits);
-                    const decA = (a / Math.pow(10, decPlace));
-                    const decB = (b / Math.pow(10, decPlace));
-                    
-                    const ans = op === '+' ? (decA + decB) : (decA - decB);
-                    // Handle float precision
-                    const cleanAns = parseFloat(ans.toPrecision(12)).toString();
-
-                    return {
-                        text: `${decA} ${op} ${decB}`,
-                        answer: cleanAns,
-                        type: 'standard',
-                        displayAnswer: cleanAns
-                    };
-                }
-                case 'dec_mul': {
-                    const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                    const maxVal = Math.pow(10, digits) - 1;
-                    const aNum = randomInt(minVal, maxVal);
-                    const bNum = randomInt(minVal, maxVal);
-                    const a = aNum / Math.pow(10, randomInt(1, digits));
-                    const b = bNum / Math.pow(10, randomInt(1, digits));
-                    const ans = parseFloat((a * b).toPrecision(12)).toString();
-                    return {
-                        text: `${a} × ${b}`,
-                        answer: ans,
-                        type: 'standard',
-                        displayAnswer: ans
-                    };
-                }
-                case 'dec_div': {
-                    const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                    const maxVal = Math.pow(10, digits) - 1;
-                    const divisorNum = randomInt(minVal, maxVal);
-                    const quotientNum = randomInt(minVal, maxVal);
-                    const divisor = divisorNum / Math.pow(10, randomInt(1, digits));
-                    const quotient = quotientNum / Math.pow(10, randomInt(1, digits));
-                    const dividend = parseFloat((divisor * quotient).toPrecision(12));
-                    return {
-                        text: `${dividend} ÷ ${divisor}`,
-                        answer: quotient.toString(),
-                        type: 'standard',
-                        displayAnswer: quotient.toString()
-                    };
-                }
-                case 'frac_add':
-                case 'frac_sub': {
-                    const op = topic === 'frac_add' ? '+' : '-';
-                    let den = randomInt(2, 10);
-                    let num1 = randomInt(1, den * 2);
-                    let num2 = randomInt(1, den * 2);
-                    
-                    if (op === '-' && num2 > num1) { let t = num1; num1 = num2; num2 = t; }
-                    
-                    let ansNum = op === '+' ? num1 + num2 : num1 - num2;
-                    let ansDen = den;
-                    
-                    // Simplify answer
-                    let d = gcd(Math.abs(ansNum), ansDen);
-                    ansNum /= d; ansDen /= d;
-
-                    return {
-                        text: <span className="flex items-center"><FractionDisplay num={num1} den={den} /> {op} <FractionDisplay num={num2} den={den} /></span>,
-                        answer: { num: ansNum.toString(), den: ansDen.toString() },
-                        type: 'fraction',
-                        displayAnswer: <FractionDisplay num={ansNum} den={ansDen} />
-                    };
-                }
-                case 'frac_mul':
-                case 'frac_div': {
-                    const op = topic === 'frac_mul' ? '×' : '÷';
-                    let n1 = randomInt(1, 9), d1 = randomInt(2, 9);
-                    let n2 = randomInt(1, 9), d2 = randomInt(2, 9);
-                    
-                    let ansNum, ansDen;
-                    if (op === '×') {
-                        ansNum = n1 * n2;
-                        ansDen = d1 * d2;
-                    } else {
-                        ansNum = n1 * d2;
-                        ansDen = d1 * n2;
-                    }
-                    
-                    let d = gcd(Math.abs(ansNum), ansDen);
-                    ansNum /= d; ansDen /= d;
-
-                    return {
-                        text: <span className="flex items-center"><FractionDisplay num={n1} den={d1} /> {op} <FractionDisplay num={n2} den={d2} /></span>,
-                        answer: { num: ansNum.toString(), den: ansDen.toString() },
-                        type: 'fraction',
-                        displayAnswer: <FractionDisplay num={ansNum} den={ansDen} />
-                    };
-                }
-                case 'frac_simplify': {
-                    let mult = randomInt(2, 6);
-                    let ansNum = randomInt(1, 5);
-                    let ansDen = randomInt(ansNum + 1, 9); // Proper fraction
-                    let startNum = ansNum * mult;
-                    let startDen = ansDen * mult;
-
-                    return {
-                        text: <span className="flex items-center">Simplify: <FractionDisplay num={startNum} den={startDen} /></span>,
-                        answer: { num: ansNum.toString(), den: ansDen.toString() },
-                        type: 'fraction',
-                        displayAnswer: <FractionDisplay num={ansNum} den={ansDen} />
-                    };
-                }
-                case 'percentages': {
-                    const type = randomInt(0, 2); // 0: find val, 1: find rate, 2: find base
-                    let base = randomInt(2, 20) * 10; // 20 to 200
-                    let rate = randomInt(1, 19) * 5; // 5% to 95%
-                    let val = (base * rate) / 100;
-
-                    if (type === 0) {
-                        return { text: `What is ${rate}% of ${base}?`, answer: val.toString(), type: 'standard', displayAnswer: val.toString() };
-                    } else if (type === 1) {
-                        return { text: `${val} is what percent of ${base}?`, answer: rate.toString(), type: 'standard', displayAnswer: `${rate}%` };
-                    } else {
-                        return { text: `${val} is ${rate}% of what number?`, answer: base.toString(), type: 'standard', displayAnswer: base.toString() };
-                    }
-                }
-                case 'exponents': {
-                    let base = randomInt(2, 9);
-                    let power = randomInt(0, 3);
-                    let ans = Math.pow(base, power);
-                    return {
-                        text: <span>Evaluate: {base}<sup>{power}</sup></span>,
-                        answer: ans.toString(),
-                        type: 'standard',
-                        displayAnswer: ans.toString()
-                    };
-                }
-                case 'laws_exp': {
-                    const ops = ['mul', 'div', 'pow'];
-                    const op = ops[randomInt(0, 2)];
-                    let p1 = randomInt(2, 6);
-                    let p2 = randomInt(1, p1-1); // ensure positive division results
-                    
-                    if (op === 'mul') {
-                        return {
-                            text: <span>Simplify: x<sup>{p1}</sup> × x<sup>{p2}</sup></span>,
-                            answer: (p1 + p2).toString(),
-                            type: 'expression',
-                            prefix: 'x^',
-                            displayAnswer: <span>x<sup>{p1+p2}</sup></span>
-                        };
-                    } else if (op === 'div') {
-                        return {
-                            text: <span>Simplify: x<sup>{p1}</sup> ÷ x<sup>{p2}</sup></span>,
-                            answer: (p1 - p2).toString(),
-                            type: 'expression',
-                            prefix: 'x^',
-                            displayAnswer: <span>x<sup>{p1-p2}</sup></span>
-                        };
-                    } else {
-                        return {
-                            text: <span>Simplify: (x<sup>{p1}</sup>)<sup>{p2}</sup></span>,
-                            answer: (p1 * p2).toString(),
-                            type: 'expression',
-                            prefix: 'x^',
-                            displayAnswer: <span>x<sup>{p1*p2}</sup></span>
-                        };
-                    }
-                }
-                default:
-                    return { text: '1 + 1', answer: '2', type: 'standard', displayAnswer: '2' };
-            }
-        };
+        const { useState, useEffect, useRef } = React;
 
         const CATEGORIES = [
-            { id: 'whole_add', label: 'Whole Numbers: Addition', group: 'Whole Numbers' },
-            { id: 'whole_sub', label: 'Whole Numbers: Subtraction', group: 'Whole Numbers' },
-            { id: 'whole_mul', label: 'Whole Numbers: Multiplication', group: 'Whole Numbers' },
-            { id: 'whole_div', label: 'Whole Numbers: Division', group: 'Whole Numbers' },
-            { id: 'whole_mixed', label: 'Whole Numbers: Mixed Operations', group: 'Whole Numbers' },
-            { id: 'dec_add', label: 'Decimals: Addition', group: 'Decimals' },
-            { id: 'dec_sub', label: 'Decimals: Subtraction', group: 'Decimals' },
-            { id: 'dec_mul', label: 'Decimals: Multiplication', group: 'Decimals' },
-            { id: 'dec_div', label: 'Decimals: Division', group: 'Decimals' },
-            { id: 'dec_mixed', label: 'Decimals: Mixed Operations', group: 'Decimals' },
-            { id: 'frac_add', label: 'Fractions: Addition', group: 'Fractions' },
-            { id: 'frac_sub', label: 'Fractions: Subtraction', group: 'Fractions' },
-            { id: 'frac_mul', label: 'Fractions: Multiplication', group: 'Fractions' },
-            { id: 'frac_div', label: 'Fractions: Division', group: 'Fractions' },
-            { id: 'frac_mixed', label: 'Fractions: Mixed Operations', group: 'Fractions' },
-            { id: 'frac_simplify', label: 'Fractions: Simplify', group: 'Fractions' },
-            { id: 'int_add', label: 'Integers: Addition', group: 'Integers' },
-            { id: 'int_sub', label: 'Integers: Subtraction', group: 'Integers' },
-            { id: 'int_mul', label: 'Integers: Multiplication', group: 'Integers' },
-            { id: 'int_div', label: 'Integers: Division', group: 'Integers' },
-            { id: 'int_mixed', label: 'Integers: Mixed Operations', group: 'Integers' },
-            { id: 'percentages', label: 'Percentages (Base, Rate, Value)', group: 'Advanced' },
-            { id: 'exponents', label: 'Exponents', group: 'Advanced' },
+            { id: 'whole_add', label: 'Addition', group: 'Whole Numbers' },
+            { id: 'whole_sub', label: 'Subtraction', group: 'Whole Numbers' },
+            { id: 'whole_mul', label: 'Multiplication', group: 'Whole Numbers' },
+            { id: 'whole_div', label: 'Division', group: 'Whole Numbers' },
+            { id: 'whole_mixed', label: 'Mixed Operations', group: 'Whole Numbers' },
+
+            { id: 'dec_add', label: 'Addition', group: 'Decimals' },
+            { id: 'dec_sub', label: 'Subtraction', group: 'Decimals' },
+            { id: 'dec_mul', label: 'Multiplication', group: 'Decimals' },
+            { id: 'dec_div', label: 'Division', group: 'Decimals' },
+            { id: 'dec_mixed', label: 'Mixed Operations', group: 'Decimals' },
+
+            { id: 'frac_add', label: 'Addition', group: 'Fractions' },
+            { id: 'frac_sub', label: 'Subtraction', group: 'Fractions' },
+            { id: 'frac_mul', label: 'Multiplication', group: 'Fractions' },
+            { id: 'frac_div', label: 'Division', group: 'Fractions' },
+            { id: 'frac_simplify', label: 'Simplifying Fractions', group: 'Fractions' },
+            { id: 'frac_mixed', label: 'Mixed Operations', group: 'Fractions' },
+
+            { id: 'int_add', label: 'Addition', group: 'Integers' },
+            { id: 'int_sub', label: 'Subtraction', group: 'Integers' },
+            { id: 'int_mul', label: 'Multiplication', group: 'Integers' },
+            { id: 'int_div', label: 'Division', group: 'Integers' },
+            { id: 'int_mixed', label: 'Mixed Operations', group: 'Integers' },
+
+            { id: 'perc_base', label: 'Find the Base', group: 'Percentages' },
+            { id: 'perc_rate', label: 'Find the Rate/Percent', group: 'Percentages' },
+            { id: 'perc_value', label: 'Find the Value/Percentage', group: 'Percentages' },
+
+            { id: 'exponents', label: 'Evaluating Exponents', group: 'Advanced' },
             { id: 'laws_exp', label: 'Laws of Exponents', group: 'Advanced' },
         ];
 
+        const GUIDES_DATA = {
+            'whole_add': {
+                title: 'Whole Numbers: Addition (Pagdaragdag)',
+                cases: [
+                    {
+                        name: 'Case 1: Without Regrouping (Walang Carry)',
+                        steps: [
+                            '1. Line up the numbers by their place value (Pagtapatin ang mga numero).',
+                            '2. Add the digits starting from the rightmost column (Magsimula mag-add sa kanan).'
+                        ],
+                        examples: [
+                            { q: '  24\n+ 15', a: '  39\n(4+5=9, 2+1=3)' },
+                            { q: '  152\n+ 234', a: '  386\n(2+4=6, 5+3=8, 1+2=3)' }
+                        ]
+                    },
+                    {
+                        name: 'Case 2: With Regrouping (May Carry)',
+                        steps: [
+                            '1. Line up the numbers.',
+                            '2. Add from right to left. If a column sum is 10 or more, write down the ones digit and "carry" the tens digit to the next column on the left (Kung 10 o higit pa, isulat ang nasa kanan at i-carry ang nasa kaliwa).'
+                        ],
+                        examples: [
+                            { q: '  47\n+ 35', a: '  82\n(7+5=12. Write 2, carry 1. 1+4+3=8)' },
+                            { q: '  289\n+ 143', a: '  432\n(9+3=12 carry 1; 1+8+4=13 carry 1; 1+2+1=4)' }
+                        ]
+                    }
+                ]
+            },
+            'whole_sub': {
+                title: 'Whole Numbers: Subtraction (Pagbabawas)',
+                cases: [
+                    {
+                        name: 'Case 1: Without Regrouping (Walang Borrow)',
+                        steps: [
+                            '1. Line up the numbers. The larger number must be on top.',
+                            '2. Subtract the bottom digit from the top digit, starting from the right (Ibawas ang nasa ibaba mula sa nasa itaas, simula kanan).'
+                        ],
+                        examples: [
+                            { q: '  87\n- 35', a: '  52\n(7-5=2, 8-3=5)' },
+                            { q: '  964\n- 241', a: '  723\n(4-1=3, 6-4=2, 9-2=7)' }
+                        ]
+                    },
+                    {
+                        name: 'Case 2: With Regrouping (May Borrow)',
+                        steps: [
+                            '1. Start subtracting from the right.',
+                            '2. If the top digit is smaller than the bottom digit, borrow 1 from the next column to the left. That 1 becomes 10 for the current column (Manghiram ng 1 sa katabi pakaliwa. Ang hiniram ay magiging 10 na idadagdag sa kasalukuyang numero).'
+                        ],
+                        examples: [
+                            { q: '  52\n- 28', a: '  24\n(2 < 8, borrow from 5. 5 becomes 4, 2 becomes 12. 12-8=4. 4-2=2)' },
+                            { q: '  304\n- 157', a: '  147\n(4 < 7, borrow from 0. 0 borrows from 3. 3 becomes 2, 0 becomes 10. Now borrow from 10. 10 becomes 9, 4 becomes 14. 14-7=7. 9-5=4. 2-1=1)' }
+                        ]
+                    }
+                ]
+            },
+            'whole_mul': {
+                title: 'Whole Numbers: Multiplication (Pagpaparami)',
+                cases: [
+                    {
+                        name: 'Case 1: Multiplier Steps',
+                        steps: [
+                            '1. Multiply the bottom digit by each top digit, starting from the right (I-multiply ang ibaba sa bawat numero sa itaas simula kanan).',
+                            '2. Carry over tens digits if the product is 10 or more.',
+                            '3. If multi-digit, put a zero placeholder (0) below before multiplying by the next digit.'
+                        ],
+                        examples: [
+                            { q: '  47\nx  6', a: ' 282\n(6x7=42, write 2 carry 4. 6x4=24, 24+4=28)' },
+                            { q: '  23\nx 14', a: '  92  (4 x 23)\n+230  (10 x 23)\n----\n 322' }
+                        ]
+                    }
+                ]
+            },
+            'whole_div': {
+                title: 'Whole Numbers: Division (Paghahati)',
+                cases: [
+                    {
+                        name: 'Case 1: Long Division',
+                        steps: [
+                            '1. Divide: How many times does the outside fit inside? (Ilang beses kasya?)',
+                            '2. Multiply your answer by the outside number.',
+                            '3. Subtract the result and bring down the next digit.'
+                        ],
+                        examples: [
+                            { q: '75 ÷ 5', a: ' 15\n(5 fits into 7 once. 1x5=5. 7-5=2. Bring down 5 = 25. 5 into 25 = 5. 5x5=25.)' }
+                        ]
+                    }
+                ]
+            },
+            'frac_add': {
+                title: 'Fractions: Addition',
+                cases: [
+                    {
+                        name: 'Case 1: Similar Fractions (Parehas na Ibaba)',
+                        steps: [
+                            '1. Add the numerators (top numbers) (Idagdag lang ang nasa itaas).',
+                            '2. Keep the denominator the same. Simplify if needed.'
+                        ],
+                        examples: [
+                            { q: '1/5 + 2/5', a: '3/5\n(1+2=3, keep 5)' }
+                        ]
+                    },
+                    {
+                        name: 'Case 2: Dissimilar Fractions (Magkaiba ang Ibaba)',
+                        steps: [
+                            '1. Find the Least Common Denominator (LCD).',
+                            '2. Convert both to equivalent fractions (Gawing pareho ang ibaba).',
+                            '3. Add numerators.'
+                        ],
+                        examples: [
+                            { q: '1/2 + 1/3', a: '5/6\n(LCD is 6. 1/2 = 3/6. 1/3 = 2/6. 3/6 + 2/6 = 5/6)' }
+                        ]
+                    }
+                ]
+            },
+            'int_add': {
+                title: 'Integers: Addition',
+                cases: [
+                    {
+                        name: 'Case 1: Same Signs (Parehong Positibo o Negatibo)',
+                        steps: [
+                            '1. Add the numbers normally, ignoring the signs.',
+                            '2. Keep their common sign (Kopyahin ang sign).'
+                        ],
+                        examples: [
+                            { q: '(-4) + (-2)', a: '-6 (Add 4+2=6, keep negative sign)' }
+                        ]
+                    },
+                    {
+                        name: 'Case 2: Different Signs (Magkaibang Sign)',
+                        steps: [
+                            '1. Subtract the smaller number from the larger number.',
+                            '2. Keep the sign of the larger number.'
+                        ],
+                        examples: [
+                            { q: '-7 + 3', a: '-4 (Subtract 7-3=4. 7 is larger and negative, so -4)' }
+                        ]
+                    }
+                ]
+            },
+            'perc_value': {
+                title: 'Percentages: Find Value',
+                cases: [
+                    {
+                        name: 'Formula: Percentage = Rate x Base',
+                        steps: [
+                            '1. Convert percent to decimal (divide by 100).',
+                            '2. Multiply by the Base number.'
+                        ],
+                        examples: [
+                            { q: 'What is 15% of 60?', a: '9\n(0.15 x 60 = 9)' }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        // Fallback for missing guide categories
+        CATEGORIES.forEach(cat => {
+            if (!GUIDES_DATA[cat.id]) {
+                GUIDES_DATA[cat.id] = {
+                    title: cat.label + ' (' + cat.group + ')',
+                    cases: [{
+                        name: 'General Guide',
+                        steps: ['Follow standard mathematical procedures for this topic.', 'Sundin ang mga karaniwang hakbang sa matematika para dito.'],
+                        examples: [{q: 'Example 1', a: 'Answer 1'}]
+                    }]
+                };
+            }
+        });
+
+        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+        const generateNumberStr = (digits) => {
+            let num = randomInt(1, 9).toString();
+            for (let i = 1; i < digits; i++) {
+                num += randomInt(0, 9).toString();
+            }
+            return num;
+        };
+
+        const generateProblemStr = (catId, settings) => {
+            let q = '', a = '';
+            let qParts = { left: '', operator: '', right: '' };
+            const digits = parseInt(settings.digits) || 2;
+            const isRegrouping = settings.regrouping; // with, without, mixed
+            const signs = settings.signs; // pos, neg, mixed
+
+            // Helper to generate digits based on sign settings
+            const getSignedNum = (val) => {
+                let isNeg = false;
+                if (signs === 'neg') isNeg = true;
+                if (signs === 'mixed') isNeg = Math.random() > 0.5;
+                return isNeg ? -val : val;
+            };
+
+            const formatSigned = (num) => num < 0 ? `(${num})` : `${num}`;
+
+            if (catId.startsWith('whole_') || catId.startsWith('int_') || catId.startsWith('dec_')) {
+                let type = catId.split('_')[1]; // add, sub, mul, div, mixed
+                const isDec = catId.startsWith('dec_');
+                const isInt = catId.startsWith('int_');
+
+                if (type === 'mixed') {
+                    const ops = ['add', 'sub', 'mul', 'div'];
+                    type = ops[Math.floor(Math.random() * ops.length)];
+                }
+
+                if (type === 'add') {
+                    let num1, num2;
+                    if (isRegrouping === 'without') {
+                        // Generate digits such that they don't exceed 9 when added
+                        let str1 = '', str2 = '';
+                        for(let i=0; i<digits; i++) {
+                            let d1 = randomInt(1, 8);
+                            let d2 = randomInt(0, 9 - d1);
+                            if(i===0 && d1===0) d1=1;
+                            if(i===0 && d2===0) d2=1;
+                            str1 += d1; str2 += d2;
+                        }
+                        num1 = parseInt(str1); num2 = parseInt(str2);
+                    } else if (isRegrouping === 'with') {
+                        // Force at least one carry
+                        let str1 = '', str2 = '';
+                        let hasCarry = false;
+                        for(let i=0; i<digits; i++) {
+                            let d1 = randomInt(1, 9);
+                            let d2 = randomInt(0, 9);
+                            if(!hasCarry && i === digits-1) d2 = randomInt(10-d1, 9) || 1; // force carry on last
+                            if(d1+d2 >= 10) hasCarry = true;
+                            str1 += d1; str2 += d2;
+                        }
+                        num1 = parseInt(str1); num2 = parseInt(str2);
+                    } else {
+                        num1 = parseInt(generateNumberStr(digits));
+                        num2 = parseInt(generateNumberStr(digits));
+                    }
+
+                    if (isDec) {
+                        num1 = num1 / Math.pow(10, Math.floor(digits/2) || 1);
+                        num2 = num2 / Math.pow(10, Math.floor(digits/2) || 1);
+                        qParts = { left: num1, operator: '+', right: num2 };
+                        a = (num1 + num2).toFixed(Math.floor(digits/2) || 1);
+                    } else if (isInt) {
+                        num1 = getSignedNum(num1); num2 = getSignedNum(num2);
+                        qParts = { left: formatSigned(num1), operator: '+', right: formatSigned(num2) };
+                        a = (num1 + num2).toString();
+                    } else {
+                        qParts = { left: num1, operator: '+', right: num2 };
+                        a = (num1 + num2).toString();
+                    }
+                } 
+                else if (type === 'sub') {
+                    let num1, num2;
+                    if (isRegrouping === 'without') {
+                        let str1 = '', str2 = '';
+                        for(let i=0; i<digits; i++) {
+                            let d1 = randomInt(1, 9);
+                            let d2 = randomInt(0, d1);
+                            str1 += d1; str2 += d2;
+                        }
+                        num1 = parseInt(str1); num2 = parseInt(str2);
+                    } else {
+                        num1 = parseInt(generateNumberStr(digits));
+                        num2 = parseInt(generateNumberStr(digits));
+                        if(num2 > num1) { let t=num1; num1=num2; num2=t; }
+                    }
+
+                    if (isDec) {
+                        num1 = num1 / Math.pow(10, Math.floor(digits/2) || 1);
+                        num2 = num2 / Math.pow(10, Math.floor(digits/2) || 1);
+                        qParts = { left: num1, operator: '-', right: num2 };
+                        a = (num1 - num2).toFixed(Math.floor(digits/2) || 1);
+                    } else if (isInt) {
+                        num1 = getSignedNum(num1); num2 = getSignedNum(num2);
+                        qParts = { left: formatSigned(num1), operator: '-', right: formatSigned(num2) };
+                        a = (num1 - num2).toString();
+                    } else {
+                        qParts = { left: num1, operator: '-', right: num2 };
+                        a = (num1 - num2).toString();
+                    }
+                }
+                else if (type === 'mul') {
+                    let num1, num2;
+                    if (settings.tables === 'mixed') {
+                        num1 = parseInt(generateNumberStr(digits));
+                        num2 = parseInt(generateNumberStr(digits));
+                    } else {
+                        num1 = parseInt(generateNumberStr(digits));
+                        num2 = parseInt(settings.tables);
+                    }
+
+                    if (isDec) {
+                        num1 = num1 / 10;
+                        if(settings.tables === 'mixed') num2 = num2 / 10;
+                        qParts = { left: num1, operator: 'x', right: num2 };
+                        a = (num1 * num2).toFixed(settings.tables === 'mixed' ? 2 : 1);
+                    } else if (isInt) {
+                        num1 = getSignedNum(num1); num2 = getSignedNum(num2);
+                        qParts = { left: formatSigned(num1), operator: 'x', right: formatSigned(num2) };
+                        a = (num1 * num2).toString();
+                    } else {
+                        qParts = { left: num1, operator: 'x', right: num2 };
+                        a = (num1 * num2).toString();
+                    }
+                }
+                else if (type === 'div') {
+                    let ans = parseInt(generateNumberStr(digits));
+                    let divisor = settings.tables === 'mixed' ? randomInt(2, 12) : parseInt(settings.tables);
+                    let dividend = ans * divisor;
+
+                    if (isDec) {
+                        dividend = (dividend / 10).toFixed(1);
+                        divisor = divisor;
+                        qParts = { left: dividend, operator: '÷', right: divisor };
+                        a = (parseFloat(dividend) / divisor).toFixed(1);
+                    } else if (isInt) {
+                        ans = getSignedNum(ans); divisor = getSignedNum(divisor);
+                        dividend = ans * divisor;
+                        qParts = { left: formatSigned(dividend), operator: '÷', right: formatSigned(divisor) };
+                        a = ans.toString();
+                    } else {
+                        qParts = { left: dividend, operator: '÷', right: divisor };
+                        a = ans.toString();
+                    }
+                }
+            } 
+            else if (catId.startsWith('frac_')) {
+                let type = catId.split('_')[1];
+                if (type === 'mixed') {
+                    const ops = ['add', 'sub', 'mul', 'div'];
+                    type = ops[Math.floor(Math.random() * ops.length)];
+                }
+
+                if (type === 'simplify') {
+                    let d = randomInt(2, 10);
+                    let n = randomInt(1, d - 1);
+                    let multiplier = randomInt(2, 6);
+                    q = `${n * multiplier} / ${d * multiplier}`;
+                    a = `${n}/${d}`;
+                } else {
+                    let n1 = randomInt(1, 5), d1 = randomInt(n1 + 1, 9);
+                    let n2 = randomInt(1, 5), d2 = randomInt(n2 + 1, 9);
+                    
+                    if (type === 'add') {
+                        q = `${n1}/${d1} + ${n2}/${d2}`;
+                        let resN = n1 * d2 + n2 * d1;
+                        let resD = d1 * d2;
+                        a = `${resN}/${resD}`; // Keep unsimplified for practice app basic logic
+                    } else if (type === 'sub') {
+                        if (n1/d1 < n2/d2) { let t = n1; n1 = n2; n2 = t; t = d1; d1 = d2; d2 = t; }
+                        q = `${n1}/${d1} - ${n2}/${d2}`;
+                        let resN = n1 * d2 - n2 * d1;
+                        let resD = d1 * d2;
+                        a = `${resN}/${resD}`;
+                    } else if (type === 'mul') {
+                        q = `${n1}/${d1} x ${n2}/${d2}`;
+                        a = `${n1*n2}/${d1*d2}`;
+                    } else if (type === 'div') {
+                        q = `${n1}/${d1} ÷ ${n2}/${d2}`;
+                        a = `${n1*d2}/${d1*n2}`;
+                    }
+                }
+            }
+            else if (catId.startsWith('perc_')) {
+                let base = randomInt(1, 20) * 10;
+                let rate = randomInt(1, 19) * 5;
+                let value = (rate / 100) * base;
+
+                if (catId === 'perc_base') {
+                    qParts = { left: value, operator: 'is ' + rate + '% of', right: '?' };
+                    a = base.toString();
+                } else if (catId === 'perc_rate') {
+                    qParts = { left: value, operator: 'is what % of', right: base };
+                    a = rate.toString();
+                } else {
+                    qParts = { left: 'What is ' + rate + '% of', operator: '', right: base };
+                    a = value.toString();
+                }
+            }
+            else if (catId === 'exponents') {
+                let base = randomInt(2, 9);
+                let exp = randomInt(2, 4);
+                if (base > 5) exp = 2; // keep numbers reasonable
+                q = `${base}^${exp}`;
+                a = Math.pow(base, exp).toString();
+            }
+            else if (catId === 'laws_exp') {
+                let base = 'x';
+                let exp1 = randomInt(2, 7);
+                let exp2 = randomInt(2, 5);
+                let ops = ['mul', 'div', 'pow'];
+                let op = ops[Math.floor(Math.random() * ops.length)];
+                
+                if (op === 'mul') {
+                    q = `${base}^${exp1} * ${base}^${exp2}`;
+                    a = `${base}^${exp1 + exp2}`;
+                } else if (op === 'div') {
+                    if (exp1 < exp2) { let t = exp1; exp1 = exp2; exp2 = t; }
+                    q = `${base}^${exp1} / ${base}^${exp2}`;
+                    a = `${base}^${exp1 - exp2}`;
+                } else {
+                    q = `(${base}^${exp1})^${exp2}`;
+                    a = `${base}^${exp1 * exp2}`;
+                }
+            }
+
+            if(qParts.left !== '') {
+                q = `${qParts.left} ${qParts.operator} ${qParts.right}`.trim();
+            }
+
+            return { q, a };
+        };
 
         const App = () => {
-            const [screen, setScreen] = useState('home'); // home, settings, quiz, results, admin_login, admin_dashboard
-            const [userName, setUserName] = useState('');
-            const [topic, setTopic] = useState(null);
-            const [authReady, setAuthReady] = useState(false);
-            const [errorMsg, setErrorMsg] = useState('');
-
+            const [screen, setScreen] = useState('home'); // home, guides, settings, quiz, results, admin_login, admin_dashboard
+            
+            // App State
+            const [studentName, setStudentName] = useState('');
+            const [selectedCategory, setSelectedCategory] = useState(null);
+            
             // Settings State
             const [settings, setSettings] = useState({
-                numQuestions: 10,
-                digits: 2,
-                regrouping: 'mixed',
-                sign: 'mixed',
-                table: 'mixed'
+                digits: '2',
+                regrouping: 'mixed', // with, without, mixed
+                signs: 'mixed', // pos, neg, mixed
+                tables: 'mixed', // 1-12 or mixed
+                totalQuestions: 10
             });
 
             // Quiz State
             const [questions, setQuestions] = useState([]);
             const [currentIndex, setCurrentIndex] = useState(0);
             const [score, setScore] = useState(0);
-            const [currentTries, setCurrentTries] = useState(0);
-            const [quizStatus, setQuizStatus] = useState('playing'); // playing, wrong, failed, success
+            const [tries, setTries] = useState(0);
+            const [showAnswer, setShowAnswer] = useState(false);
+            const [errorMsg, setErrorMsg] = useState('');
             
-            // User Inputs
+            // Input States
             const [stdInput, setStdInput] = useState('');
             const [fracInput, setFracInput] = useState({ num: '', den: '' });
 
-            // Admin State
+            // Admin / Guides
             const [adminPass, setAdminPass] = useState('');
-            const [adminData, setAdminData] = useState([]);
-            const [adminLoading, setAdminLoading] = useState(false);
+            const [scoresList, setScoresList] = useState([]);
+            const [selectedGuideId, setSelectedGuideId] = useState('whole_add');
 
-            useEffect(() => {
-                const initAuth = async () => {
-                    try {
-                        const { auth, signInAnonymously, signInWithCustomToken, initialAuthToken } = window.FirebaseApp;
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                        setAuthReady(true);
-                    } catch (error) {
-                        console.error("Auth error:", error);
-                        setErrorMsg("Could not connect to database. Progress won't be saved.");
-                        setAuthReady(true); // Let them play anyway
-                    }
+            // Save to external DB logic
+            const syncScore = async (finalScore, maxScore) => {
+                const data = {
+                    name: studentName,
+                    topic: selectedCategory.label + ' (' + selectedCategory.group + ')',
+                    score: finalScore,
+                    total: maxScore,
+                    timestamp: new Date().toISOString()
                 };
-                initAuth();
-            }, []);
 
-            const startSettings = (selectedTopic) => {
-                if (!userName.trim()) {
-                    setErrorMsg("Please enter your name first.");
-                    setTimeout(() => setErrorMsg(''), 3000);
-                    return;
+                // Firebase
+                if (window.saveScoreToFirebase) {
+                    await window.saveScoreToFirebase(data);
                 }
-                setTopic(selectedTopic);
-                // Reset defaults based on topic
-                let defaultDigits = 2;
-                if (selectedTopic.id && selectedTopic.id.includes('dec')) defaultDigits = 1; // Ensure we read .id properly to avoid crash
-                setSettings({ ...settings, digits: defaultDigits, regrouping: 'mixed', sign: 'mixed', table: 'mixed', numQuestions: 10 });
-                setScreen('settings');
+
+                // Google Apps Script Fallback
+                if (typeof google !== 'undefined' && google.script && google.script.run) {
+                    google.script.run.saveScoreToSheet(data);
+                }
             };
 
-            const startQuiz = () => {
-                const generated = [];
-                for (let i = 0; i < settings.numQuestions; i++) {
-                    generated.push(generateQuestion(topic.id, settings));
+            const handleStartQuiz = () => {
+                if (!studentName.trim()) {
+                    setErrorMsg('Please enter your name first!');
+                    return;
+                }
+                setErrorMsg('');
+                
+                let generated = [];
+                for(let i=0; i<settings.totalQuestions; i++) {
+                    generated.push(generateProblemStr(selectedCategory.id, settings));
                 }
                 setQuestions(generated);
                 setCurrentIndex(0);
                 setScore(0);
-                setCurrentTries(0);
-                setQuizStatus('playing');
-                resetInputs();
+                setTries(0);
+                setShowAnswer(false);
+                setStdInput('');
+                setFracInput({num: '', den: ''});
                 setScreen('quiz');
             };
 
-            const resetInputs = () => {
-                setStdInput('');
-                setFracInput({ num: '', den: '' });
-            };
-
-            const cancelQuiz = () => {
-                if(confirm("Are you sure you want to cancel? Your progress will be lost.")) {
-                    setScreen('home');
-                }
-            };
-
-            const checkAnswer = () => {
-                const q = questions[currentIndex];
-                let isCorrect = false;
-
-                if (q.type === 'standard' || q.type === 'expression') {
-                    // Tolerant to extra spaces, case insensitive
-                    isCorrect = stdInput.trim().toLowerCase() === q.answer.toString().toLowerCase();
-                } else if (q.type === 'fraction') {
-                    // Note: for fractions we require exact simplified match based on generator
-                    // but we can allow 2/-3 == -2/3. For simplicity, match strictly what's generated.
-                    // Wait, sometimes generator output might be num:1, den:1. Let's allow simple matches.
-                    const inNum = parseInt(fracInput.num);
-                    const inDen = parseInt(fracInput.den) || 1;
-                    const ansNum = parseInt(q.answer.num);
-                    const ansDen = parseInt(q.answer.den);
-
-                    // Cross multiply check for equivalence AND check if simplified if it's simplify category
-                    if (topic.id === 'frac_simplify') {
-                         isCorrect = (inNum === ansNum && inDen === ansDen);
-                    } else {
-                         // General fraction equivalence 
-                         if (inDen !== 0 && (inNum * ansDen === ansNum * inDen)) {
-                            isCorrect = true;
-                         }
-                    }
-                }
-
-                if (isCorrect) {
-                    setQuizStatus('success');
-                    if (currentTries === 0) {
-                        setScore(score + 1);
-                    }
+            const handleSubmitAnswer = () => {
+                let userAnswer = '';
+                const currentQ = questions[currentIndex];
+                const isFrac = selectedCategory.id.startsWith('frac_') && selectedCategory.id !== 'frac_simplify' && !currentQ.a.includes('^');
+                
+                if (isFrac) {
+                    userAnswer = `${fracInput.num}/${fracInput.den}`;
                 } else {
-                    const newTries = currentTries + 1;
-                    setCurrentTries(newTries);
-                    if (newTries >= 2) {
-                        setQuizStatus('failed');
+                    userAnswer = stdInput.trim().toLowerCase(); // lowercase for 'x^4' type answers
+                }
+
+                if (userAnswer === currentQ.a.toLowerCase()) {
+                    if (tries === 0) setScore(score + 1);
+                    nextQuestion();
+                } else {
+                    if (tries === 0) {
+                        setTries(1);
+                        setErrorMsg('Incorrect. Try again!');
                     } else {
-                        setQuizStatus('wrong');
+                        setShowAnswer(true);
+                        setErrorMsg('Incorrect. Showing correct answer.');
                     }
                 }
             };
 
             const nextQuestion = () => {
-                if (currentIndex + 1 < questions.length) {
+                if (currentIndex + 1 >= settings.totalQuestions) {
+                    let finalScore = tries === 0 && !showAnswer && !errorMsg.includes('Incorrect') ? score + 1 : score;
+                    // Note: Quick sync fix - rely on correct state closure or param pass
+                    const calculatedFinalScore = score + (stdInput.trim().toLowerCase() === questions[currentIndex].a.toLowerCase() && tries === 0 ? 1 : 0);
+                    syncScore(calculatedFinalScore, settings.totalQuestions);
+                    setScreen('results');
+                } else {
                     setCurrentIndex(currentIndex + 1);
-                    setCurrentTries(0);
-                    setQuizStatus('playing');
-                    resetInputs();
-                } else {
-                    finishQuiz();
+                    setTries(0);
+                    setShowAnswer(false);
+                    setErrorMsg('');
+                    setStdInput('');
+                    setFracInput({num: '', den: ''});
                 }
             };
 
-            const finishQuiz = async () => {
-                setScreen('results');
-                
-                const finalScore = (quizStatus === 'success' && currentTries === 0 && currentIndex === questions.length-1) ? score + 1 : score;
-                
-                // Save to Firestore
-                const { db, auth, appId, collection, addDoc } = window.FirebaseApp;
-                if (auth && auth.currentUser) {
-                    try {
-                        const path = collection(db, 'artifacts', appId, 'public', 'data', 'math_scores');
-                        await addDoc(path, {
-                            name: userName,
-                            topic: topic.label,
-                            score: finalScore,
-                            total: questions.length,
-                            timestamp: new Date().toISOString()
-                        });
-                    } catch (e) {
-                        console.error("Failed to save score:", e);
-                    }
+            const fetchAdminScores = async () => {
+                if (window.getScoresFromFirebase) {
+                    const data = await window.getScoresFromFirebase();
+                    setScoresList(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
                 }
-
-                // Save to Google Apps Script (if deployed as Web App)
-                if (typeof google !== 'undefined' && google.script && google.script.run) {
-                    google.script.run.withFailureHandler(console.error).saveScoreToSheet({
-                        name: userName,
-                        topic: topic.label,
-                        score: finalScore,
-                        total: questions.length,
-                        timestamp: new Date().toISOString()
-                    });
-                }
-            };
-
-            const handleAdminLogin = (e) => {
-                e.preventDefault();
-                if (adminPass === 'Admin1') {
-                    setScreen('admin_dashboard');
-                    setAdminPass('');
-                    fetchAdminData();
-                } else {
-                    alert("Incorrect Password");
-                }
-            };
-
-            const fetchAdminData = async () => {
-                setAdminLoading(true);
-                const { db, auth, appId, collection, getDocs } = window.FirebaseApp;
-                if (!auth.currentUser) {
-                    setAdminLoading(false);
-                    return;
-                }
-                try {
-                    const path = collection(db, 'artifacts', appId, 'public', 'data', 'math_scores');
-                    const snapshot = await getDocs(path);
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    // Sort descending by timestamp in memory (Rule 2)
-                    data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    setAdminData(data);
-                } catch (e) {
-                    console.error("Admin fetch error", e);
-                }
-                setAdminLoading(false);
             };
 
             if (screen === 'home') {
-                // Group categories
-                const groups = CATEGORIES.reduce((acc, cat) => {
+                const groupedCats = CATEGORIES.reduce((acc, cat) => {
                     if (!acc[cat.group]) acc[cat.group] = [];
                     acc[cat.group].push(cat);
                     return acc;
                 }, {});
 
                 return (
-                    <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10 px-4">
+                    <div className="min-h-screen flex flex-col items-center py-10 px-4">
                         <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden relative">
                             <button onClick={() => setScreen('admin_login')} className="absolute top-4 right-4 text-xs font-semibold text-gray-400 hover:text-gray-800 transition">Admin Panel</button>
                             
                             <div className="bg-blue-600 p-8 text-center text-white">
                                 <h1 className="text-3xl md:text-4xl font-bold mb-2">Math Practice Pro</h1>
-                                <p className="text-blue-100">Master your math skills step by step.</p>
+                                <p className="text-blue-100 mb-4">Master your math skills step by step.</p>
+                                <button 
+                                    onClick={() => setScreen('guides')}
+                                    className="bg-white text-blue-600 px-6 py-2 rounded-full font-bold shadow hover:bg-blue-50 transition"
+                                >
+                                    📖 View Study Guides
+                                </button>
                             </div>
 
                             <div className="p-8">
-                                <div className="mb-8 max-w-md mx-auto">
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Student Name</label>
+                                <div className="mb-6 max-w-md mx-auto">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">Student Name:</label>
                                     <input 
                                         type="text" 
-                                        value={userName}
-                                        onChange={(e) => setUserName(e.target.value)}
-                                        placeholder="Enter your name to start..."
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm transition"
+                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                                        placeholder="Enter your full name to start..."
+                                        value={studentName}
+                                        onChange={e => setStudentName(e.target.value)}
                                     />
-                                    {errorMsg && <p className="text-red-500 text-sm mt-2 font-medium">{errorMsg}</p>}
+                                    {errorMsg && <p className="text-red-500 text-sm mt-1">{errorMsg}</p>}
                                 </div>
 
-                                <h2 className="text-xl font-bold text-gray-800 mb-6 text-center border-b pb-2">Select a Topic</h2>
+                                <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Select a Topic to Practice</h2>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {Object.entries(groups).map(([groupName, cats]) => (
-                                        <div key={groupName} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                                            <h3 className="font-bold text-gray-700 mb-3 text-sm uppercase tracking-wider">{groupName}</h3>
-                                            <div className="space-y-2">
-                                                {cats.map(c => (
-                                                    <button 
-                                                        key={c.id} 
-                                                        onClick={() => startSettings(c)}
-                                                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-100 hover:text-blue-800 transition text-sm font-medium text-gray-600 bg-white shadow-sm border border-gray-100"
-                                                    >
-                                                        {c.label}
-                                                    </button>
-                                                ))}
-                                            </div>
+                                {Object.entries(groupedCats).map(([group, cats]) => (
+                                    <div key={group} className="mb-8">
+                                        <h3 className="text-lg font-bold text-gray-500 border-b pb-2 mb-4">{group}</h3>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                            {cats.map(cat => (
+                                                <button 
+                                                    key={cat.id}
+                                                    onClick={() => { setSelectedCategory(cat); setScreen('settings'); setErrorMsg(''); }}
+                                                    className="bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl p-4 text-center transition flex flex-col items-center justify-center"
+                                                >
+                                                    <span className="font-semibold text-gray-700">{cat.label}</span>
+                                                </button>
+                                            ))}
                                         </div>
-                                    ))}
-                                </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -735,37 +696,22 @@
             }
 
             if (screen === 'settings') {
-                return (
-                    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-                        <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-8">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">{topic.label} Settings</h2>
-                            
-                            <div className="space-y-5">
-                                {/* Number of Questions */}
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Number of Questions</label>
-                                    <select 
-                                        value={settings.numQuestions}
-                                        onChange={e => setSettings({...settings, numQuestions: parseInt(e.target.value)})}
-                                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                    >
-                                        <option value="5">5</option>
-                                        <option value="10">10</option>
-                                        <option value="15">15</option>
-                                        <option value="20">20</option>
-                                        <option value="30">30</option>
-                                    </select>
-                                </div>
+                const needsDigits = selectedCategory.id.startsWith('whole_') || selectedCategory.id.startsWith('dec_') || selectedCategory.id.startsWith('int_');
+                const needsRegrouping = selectedCategory.id.includes('_add') || selectedCategory.id.includes('_sub');
+                const needsSigns = selectedCategory.id.startsWith('int_');
+                const needsTables = selectedCategory.id.includes('_mul') || selectedCategory.id.includes('_div');
 
-                                {/* Digits (for whole numbers, decimals, integers) */}
-                                {(topic.id.includes('whole_') || topic.id.includes('dec_') || topic.id.includes('int_')) && (
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Practice Settings</h2>
+                            <p className="text-gray-500 mb-6 border-b pb-4">{selectedCategory.group}: {selectedCategory.label}</p>
+
+                            <div className="space-y-5">
+                                {needsDigits && (
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-1">Number of Digits</label>
-                                        <select 
-                                            value={settings.digits}
-                                            onChange={e => setSettings({...settings, digits: parseInt(e.target.value)})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
+                                        <select value={settings.digits} onChange={e => setSettings({...settings, digits: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
                                             <option value="1">1 Digit</option>
                                             <option value="2">2 Digits</option>
                                             <option value="3">3 Digits</option>
@@ -774,59 +720,51 @@
                                     </div>
                                 )}
 
-                                {/* Regrouping (for addition/subtraction of whole/dec/int) */}
-                                {/(whole|dec|int)_(add|sub|mixed)/.test(topic.id) && (
+                                {needsRegrouping && !selectedCategory.id.startsWith('frac_') && (
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Regrouping (Borrowing/Carrying)</label>
-                                        <select 
-                                            value={settings.regrouping}
-                                            onChange={e => setSettings({...settings, regrouping: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Regrouping (Carry/Borrow)</label>
+                                        <select value={settings.regrouping} onChange={e => setSettings({...settings, regrouping: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
                                             <option value="mixed">Mixed (Random)</option>
-                                            <option value="no">Without Regrouping</option>
-                                            <option value="yes">With Regrouping</option>
+                                            <option value="without">Without Regrouping</option>
+                                            <option value="with">With Regrouping</option>
                                         </select>
                                     </div>
                                 )}
 
-                                {/* Sign (for integers) */}
-                                {topic.id.includes('int_') && (
+                                {needsSigns && (
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Signs Included</label>
-                                        <select 
-                                            value={settings.sign}
-                                            onChange={e => setSettings({...settings, sign: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
-                                            <option value="mixed">Both Positive & Negative</option>
-                                            <option value="positive">Positive Only</option>
-                                            <option value="negative">Negative Only</option>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Integer Signs</label>
+                                        <select value={settings.signs} onChange={e => setSettings({...settings, signs: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
+                                            <option value="mixed">Mixed (Positive & Negative)</option>
+                                            <option value="pos">Positive Only</option>
+                                            <option value="neg">Negative Only</option>
                                         </select>
                                     </div>
                                 )}
 
-                                {/* Tables (for multiplication/division of whole/integers) */}
-                                {/(whole|int)_(mul|div|mixed)/.test(topic.id) && (
+                                {needsTables && (
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Times Tables (1-12)</label>
-                                        <select 
-                                            value={settings.table}
-                                            onChange={e => setSettings({...settings, table: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
-                                            <option value="mixed">Mixed</option>
-                                            {[...Array(12)].map((_, i) => (
-                                                <option key={i+1} value={i+1}>Table of {i+1}</option>
-                                            ))}
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Times Tables (Multiplier/Divisor)</label>
+                                        <select value={settings.tables} onChange={e => setSettings({...settings, tables: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
+                                            <option value="mixed">Mixed (Random up to digits length)</option>
+                                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>Table of {n}</option>)}
                                         </select>
                                     </div>
                                 )}
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Number of Questions</label>
+                                    <select value={settings.totalQuestions} onChange={e => setSettings({...settings, totalQuestions: parseInt(e.target.value)})} className="w-full p-2 border rounded-lg bg-gray-50">
+                                        <option value={5}>5 Questions</option>
+                                        <option value={10}>10 Questions</option>
+                                        <option value={20}>20 Questions</option>
+                                    </select>
+                                </div>
                             </div>
 
-                            <div className="flex gap-4 mt-8">
-                                <button onClick={() => setScreen('home')} className="flex-1 py-3 bg-gray-200 text-gray-800 rounded-lg font-bold hover:bg-gray-300 transition">Back</button>
-                                <button onClick={startQuiz} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">Start Practice</button>
+                            <div className="mt-8 flex gap-3">
+                                <button onClick={() => setScreen('home')} className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">Back</button>
+                                <button onClick={handleStartQuiz} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Start Quiz</button>
                             </div>
                         </div>
                     </div>
@@ -834,115 +772,52 @@
             }
 
             if (screen === 'quiz') {
-                const q = questions[currentIndex];
-                const isFinished = quizStatus === 'success' || quizStatus === 'failed';
+                const currentQ = questions[currentIndex];
+                const isFrac = selectedCategory.id.startsWith('frac_') && selectedCategory.id !== 'frac_simplify' && !currentQ.a.includes('^');
 
                 return (
-                    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-                        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col min-h-[400px]">
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg relative">
+                            <button onClick={() => setScreen('home')} className="absolute top-4 right-4 text-sm text-red-500 hover:text-red-700 font-semibold">Cancel Progress</button>
                             
-                            {/* Header */}
-                            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                                <div className="text-gray-500 font-semibold text-sm">Question {currentIndex + 1} of {questions.length}</div>
-                                <button onClick={cancelQuiz} className="text-red-500 hover:text-red-700 font-semibold text-sm transition">Cancel</button>
+                            <div className="flex justify-between text-sm font-bold text-gray-500 mb-6">
+                                <span>{studentName}</span>
+                                <span>Question {currentIndex + 1} of {settings.totalQuestions}</span>
                             </div>
 
-                            {/* Main Content Area */}
-                            <div className="flex-1 p-8 flex flex-col items-center justify-center">
-                                <h2 className="text-4xl font-bold text-gray-800 mb-10 flex items-center justify-center text-center">
-                                    {q.text} <span className="mx-4">=</span> ?
-                                </h2>
-
-                                {/* Input Area */}
-                                <div className="mb-8 w-full flex justify-center">
-                                    {q.type === 'standard' && (
-                                        <input 
-                                            type="text" 
-                                            value={stdInput}
-                                            onChange={e => setStdInput(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                            disabled={isFinished}
-                                            className="text-center text-3xl w-48 px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition shadow-inner"
-                                            autoFocus
-                                        />
-                                    )}
-                                    
-                                    {q.type === 'expression' && (
-                                        <div className="flex items-center text-3xl font-bold">
-                                            <span className="mr-1">x</span><sup className="mt-[-20px]">
-                                                <input 
-                                                    type="text" 
-                                                    value={stdInput}
-                                                    onChange={e => setStdInput(e.target.value)}
-                                                    onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                                    disabled={isFinished}
-                                                    className="text-center w-16 px-1 py-1 border-2 border-gray-300 rounded focus:border-blue-500 focus:outline-none text-xl shadow-inner"
-                                                    autoFocus
-                                                />
-                                            </sup>
-                                        </div>
-                                    )}
-
-                                    {q.type === 'fraction' && (
-                                        <div className="flex flex-col items-center gap-2">
-                                            <input 
-                                                type="number" 
-                                                value={fracInput.num}
-                                                onChange={e => setFracInput({...fracInput, num: e.target.value})}
-                                                onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                                disabled={isFinished}
-                                                className="text-center text-2xl w-24 px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition shadow-inner"
-                                                placeholder="num"
-                                                autoFocus
-                                            />
-                                            <div className="h-1 w-24 bg-gray-800 rounded"></div>
-                                            <input 
-                                                type="number" 
-                                                value={fracInput.den}
-                                                onChange={e => setFracInput({...fracInput, den: e.target.value})}
-                                                onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                                disabled={isFinished}
-                                                className="text-center text-2xl w-24 px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition shadow-inner"
-                                                placeholder="den"
-                                            />
-                                        </div>
-                                    )}
+                            <div className="text-center mb-8">
+                                <div className="text-4xl md:text-5xl font-mono font-bold text-gray-800 tracking-wider mb-6 bg-gray-50 py-8 rounded-xl border border-gray-100 shadow-inner">
+                                    {currentQ.q} = ?
                                 </div>
 
-                                {/* Status Messages */}
-                                {quizStatus === 'wrong' && (
-                                    <div className="text-orange-500 font-bold mb-4 animate-bounce">Incorrect. You have 1 try left!</div>
-                                )}
-                                {quizStatus === 'success' && (
-                                    <div className="text-green-500 font-bold text-xl mb-4 bg-green-100 px-6 py-2 rounded-full border border-green-200">Correct! Great job.</div>
-                                )}
-                                {quizStatus === 'failed' && (
-                                    <div className="flex flex-col items-center text-red-500 font-bold mb-4">
-                                        <span className="mb-2">Incorrect. The correct answer is:</span>
-                                        <div className="text-3xl text-gray-800 bg-gray-100 px-6 py-3 rounded-xl border border-gray-300">
-                                            {q.displayAnswer}
-                                        </div>
+                                {!showAnswer ? (
+                                    <div className="max-w-xs mx-auto">
+                                        {isFrac ? (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <input type="number" value={fracInput.num} onChange={e => setFracInput({...fracInput, num: e.target.value})} className="w-24 text-center p-2 text-xl border-2 border-gray-300 rounded focus:border-blue-500 outline-none" placeholder="Num" />
+                                                <div className="w-24 h-1 bg-gray-800 rounded"></div>
+                                                <input type="number" value={fracInput.den} onChange={e => setFracInput({...fracInput, den: e.target.value})} className="w-24 text-center p-2 text-xl border-2 border-gray-300 rounded focus:border-blue-500 outline-none" placeholder="Den" />
+                                            </div>
+                                        ) : (
+                                            <input 
+                                                type="text" 
+                                                value={stdInput} 
+                                                onChange={e => setStdInput(e.target.value)} 
+                                                onKeyDown={e => e.key === 'Enter' && handleSubmitAnswer()}
+                                                className="w-full text-center p-3 text-2xl border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none" 
+                                                placeholder="Your Answer" 
+                                                autoFocus
+                                            />
+                                        )}
+                                        {errorMsg && <p className="text-red-500 font-semibold mt-3 animate-pulse">{errorMsg}</p>}
+                                        <button onClick={handleSubmitAnswer} className="mt-6 w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Submit Answer</button>
                                     </div>
-                                )}
-                            </div>
-
-                            {/* Footer Actions */}
-                            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end">
-                                {!isFinished ? (
-                                    <button 
-                                        onClick={checkAnswer}
-                                        className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold shadow hover:bg-blue-700 transition active:scale-95"
-                                    >
-                                        Check Answer
-                                    </button>
                                 ) : (
-                                    <button 
-                                        onClick={nextQuestion}
-                                        className="px-8 py-3 bg-green-600 text-white rounded-xl font-bold shadow hover:bg-green-700 transition active:scale-95"
-                                        autoFocus
-                                    >
-                                        {currentIndex + 1 < questions.length ? 'Next Question' : 'Finish Practice'}
-                                    </button>
+                                    <div className="max-w-xs mx-auto animate-fade-in">
+                                        <p className="text-red-500 font-bold mb-2">The correct answer is:</p>
+                                        <div className="text-3xl font-mono font-bold text-green-600 bg-green-50 py-4 rounded-lg border border-green-200 mb-6">{currentQ.a}</div>
+                                        <button onClick={nextQuestion} className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Next Question</button>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -951,38 +826,24 @@
             }
 
             if (screen === 'results') {
-                const percentage = Math.round((score / questions.length) * 100);
+                const percentage = (score / settings.totalQuestions) * 100;
                 let message = "Keep practicing!";
-                if (percentage >= 90) message = "Outstanding Work!";
-                else if (percentage >= 70) message = "Great Job!";
-                else if (percentage >= 50) message = "Good Effort!";
+                if (percentage >= 90) message = "Excellent work!";
+                else if (percentage >= 70) message = "Great job!";
 
                 return (
-                    <div className="min-h-screen bg-blue-600 flex items-center justify-center p-4">
-                        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 text-center relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-blue-50 to-white"></div>
-                            <div className="relative z-10">
-                                <h2 className="text-3xl font-bold text-gray-800 mb-2">{message}</h2>
-                                <p className="text-gray-500 mb-8 font-medium">{userName}, here is your result for {topic.label}.</p>
-                                
-                                <div className="mb-10 relative inline-block">
-                                    <svg className="w-40 h-40 transform -rotate-90">
-                                        <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-gray-200" />
-                                        <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="12" fill="transparent" strokeDasharray="440" strokeDashoffset={440 - (440 * percentage) / 100} className={`${percentage >= 70 ? 'text-green-500' : (percentage >= 50 ? 'text-yellow-400' : 'text-red-500')} transition-all duration-1000 ease-out`} />
-                                    </svg>
-                                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                                        <span className="text-4xl font-extrabold text-gray-800">{score}</span>
-                                        <span className="text-sm font-semibold text-gray-400 border-t-2 border-gray-200 pt-1 w-12 text-center mt-1">{questions.length}</span>
-                                    </div>
-                                </div>
-
-                                <button 
-                                    onClick={() => setScreen('home')}
-                                    className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:bg-gray-800 transition active:scale-95"
-                                >
-                                    Back to Home
-                                </button>
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+                            <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">🏆</div>
+                            <h2 className="text-3xl font-bold text-gray-800 mb-2">{message}</h2>
+                            <p className="text-gray-500 mb-6 font-medium">{studentName}</p>
+                            
+                            <div className="bg-gray-50 rounded-xl p-6 mb-6">
+                                <p className="text-sm text-gray-500 uppercase tracking-wider font-bold mb-1">Final Score</p>
+                                <p className="text-5xl font-extrabold text-blue-600">{score} <span className="text-2xl text-gray-400">/ {settings.totalQuestions}</span></p>
                             </div>
+
+                            <button onClick={() => setScreen('home')} className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Return Home</button>
                         </div>
                     </div>
                 );
@@ -990,97 +851,162 @@
 
             if (screen === 'admin_login') {
                 return (
-                    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-                        <form onSubmit={handleAdminLogin} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
-                            <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Admin Access</h2>
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
+                            <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Admin Access</h2>
                             <input 
                                 type="password" 
-                                value={adminPass}
-                                onChange={e => setAdminPass(e.target.value)}
+                                value={adminPass} 
+                                onChange={e => setAdminPass(e.target.value)} 
+                                className="w-full p-3 border rounded-lg mb-4" 
                                 placeholder="Enter Password"
-                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none mb-6"
-                                autoFocus
                             />
-                            <div className="flex gap-3">
-                                <button type="button" onClick={() => setScreen('home')} className="flex-1 py-3 bg-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-300 transition">Cancel</button>
-                                <button type="submit" className="flex-1 py-3 bg-gray-900 text-white font-bold rounded-lg hover:bg-black transition">Login</button>
+                            {errorMsg && <p className="text-red-500 text-sm mb-4 text-center">{errorMsg}</p>}
+                            <div className="flex gap-2">
+                                <button onClick={() => { setScreen('home'); setErrorMsg(''); }} className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg">Back</button>
+                                <button onClick={() => {
+                                    if (adminPass === 'Admin1') {
+                                        setErrorMsg('');
+                                        setAdminPass('');
+                                        fetchAdminScores();
+                                        setScreen('admin_dashboard');
+                                    } else {
+                                        setErrorMsg('Incorrect Password');
+                                    }
+                                }} className="flex-1 py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-900">Login</button>
                             </div>
-                        </form>
+                        </div>
                     </div>
                 );
             }
 
             if (screen === 'admin_dashboard') {
                 return (
-                    <div className="min-h-screen bg-gray-50 flex flex-col">
-                        <div className="bg-gray-900 text-white p-4 shadow-md flex justify-between items-center sticky top-0 z-10">
-                            <h1 className="text-xl font-bold flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                Admin Dashboard
-                            </h1>
-                            <button onClick={() => setScreen('home')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-semibold transition">Back to App</button>
-                        </div>
-                        
-                        <div className="flex-1 p-6 lg:p-10 max-w-6xl mx-auto w-full">
-                            <div className="flex justify-between items-end mb-6">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-gray-800">Student Scores</h2>
-                                    <p className="text-gray-500 text-sm mt-1">Review performance across all topics.</p>
-                                </div>
-                                <button onClick={fetchAdminData} className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 text-sm bg-blue-50 px-3 py-2 rounded">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg> Refresh
-                                </button>
+                    <div className="min-h-screen bg-gray-50 p-6 md:p-10">
+                        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+                            <div className="bg-gray-800 text-white p-6 flex justify-between items-center">
+                                <h2 className="text-2xl font-bold">Admin Dashboard: Scores</h2>
+                                <button onClick={() => setScreen('home')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-semibold transition">Exit Admin</button>
                             </div>
-
-                            <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
-                                {adminLoading ? (
-                                    <div className="p-10 text-center text-gray-500 font-medium animate-pulse">Loading records...</div>
-                                ) : adminData.length === 0 ? (
-                                    <div className="p-10 text-center text-gray-500 font-medium">No records found.</div>
+                            <div className="p-6">
+                                {scoresList.length === 0 ? (
+                                    <p className="text-center text-gray-500 py-10">No scores recorded yet. Make sure Firebase is connected correctly.</p>
                                 ) : (
-                                    <div className="overflow-x-auto custom-scrollbar">
+                                    <div className="overflow-x-auto">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
-                                                <tr className="bg-gray-100 text-gray-700 text-sm uppercase tracking-wider">
-                                                    <th className="p-4 font-semibold border-b">Date/Time</th>
-                                                    <th className="p-4 font-semibold border-b">Student Name</th>
-                                                    <th className="p-4 font-semibold border-b">Category / Topic</th>
-                                                    <th className="p-4 font-semibold border-b text-right">Score</th>
-                                                    <th className="p-4 font-semibold border-b text-center">%</th>
+                                                <tr className="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider">
+                                                    <th className="p-4 rounded-tl-lg">Date</th>
+                                                    <th className="p-4">Name</th>
+                                                    <th className="p-4">Topic</th>
+                                                    <th className="p-4 rounded-tr-lg">Score</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
-                                                {adminData.map(record => {
-                                                    const date = new Date(record.timestamp);
-                                                    const perc = Math.round((record.score / record.total) * 100);
-                                                    return (
-                                                        <tr key={record.id} className="hover:bg-gray-50 transition">
-                                                            <td className="p-4 text-sm text-gray-500 whitespace-nowrap">
-                                                                {date.toLocaleDateString()} <span className="text-xs">{date.toLocaleTimeString()}</span>
-                                                            </td>
-                                                            <td className="p-4 font-medium text-gray-800">{record.name}</td>
-                                                            <td className="p-4 text-sm text-gray-600">
-                                                                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{record.topic}</span>
-                                                            </td>
-                                                            <td className="p-4 text-right font-bold text-gray-700">
-                                                                {record.score} <span className="text-gray-400 font-medium">/ {record.total}</span>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${perc >= 80 ? 'bg-green-100 text-green-800' : (perc >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800')}`}>
-                                                                    {perc}%
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    )
-                                                })}
+                                                {scoresList.map((s, i) => (
+                                                    <tr key={i} className="hover:bg-gray-50 transition text-sm">
+                                                        <td className="p-4 text-gray-500">{new Date(s.timestamp).toLocaleDateString()} {new Date(s.timestamp).toLocaleTimeString()}</td>
+                                                        <td className="p-4 font-bold text-gray-800">{s.name}</td>
+                                                        <td className="p-4 text-gray-600">{s.topic}</td>
+                                                        <td className="p-4 font-bold text-blue-600">{s.score} / {s.total}</td>
+                                                    </tr>
+                                                ))}
                                             </tbody>
                                         </table>
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (screen === 'guides') {
+                const currentGuide = GUIDES_DATA[selectedGuideId];
+                const guideGroups = CATEGORIES.reduce((acc, cat) => {
+                    if (!acc[cat.group]) acc[cat.group] = [];
+                    acc[cat.group].push(cat);
+                    return acc;
+                }, {});
+
+                return (
+                    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+                        {/* Mobile Header */}
+                        <div className="md:hidden bg-blue-600 text-white p-4 flex justify-between items-center z-10 sticky top-0 shadow-md">
+                            <h1 className="font-bold text-lg">Study Guides</h1>
+                            <button onClick={() => setScreen('home')} className="text-sm bg-blue-700 px-3 py-1 rounded">Back</button>
+                        </div>
+
+                        {/* Sidebar */}
+                        <div className="w-full md:w-72 bg-white border-r border-gray-200 flex flex-col h-auto md:h-screen sticky top-0 z-0">
+                            <div className="hidden md:flex bg-blue-600 text-white p-5 justify-between items-center">
+                                <h2 className="font-bold text-xl">Study Guides</h2>
+                                <button onClick={() => setScreen('home')} className="text-sm bg-white text-blue-600 px-3 py-1 rounded font-semibold hover:bg-blue-50 transition">Home</button>
+                            </div>
+                            <div className="overflow-y-auto custom-scrollbar flex-1 p-4 max-h-[30vh] md:max-h-full border-b md:border-b-0">
+                                {Object.entries(guideGroups).map(([groupName, cats]) => (
+                                    <div key={groupName} className="mb-6">
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">{groupName}</h3>
+                                        <div className="space-y-1">
+                                            {cats.map(c => (
+                                                <button 
+                                                    key={c.id}
+                                                    onClick={() => setSelectedGuideId(c.id)}
+                                                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition ${selectedGuideId === c.id ? 'bg-blue-100 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+                                                >
+                                                    {c.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Main Content Area */}
+                        <div className="flex-1 p-6 md:p-10 overflow-y-auto h-auto md:h-screen bg-gray-50">
+                            <div className="max-w-3xl mx-auto">
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                                    <h1 className="text-3xl font-extrabold text-gray-800 mb-6 border-b pb-4">{currentGuide.title}</h1>
+                                    
+                                    <div className="space-y-8">
+                                        {currentGuide.cases.map((guideCase, index) => (
+                                            <div key={index} className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                                                <h3 className="text-xl font-bold text-blue-700 mb-4 flex items-center">
+                                                    <span className="bg-blue-200 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center mr-3 text-sm">{index + 1}</span>
+                                                    {guideCase.name}
+                                                </h3>
+                                                
+                                                <div className="mb-6">
+                                                    <h4 className="font-semibold text-gray-700 mb-2">Steps to Solve (Mga Hakbang):</h4>
+                                                    <ul className="list-none space-y-2 text-gray-600 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                                                        {guideCase.steps.map((step, sIdx) => (
+                                                            <li key={sIdx} className="flex items-start">
+                                                                <span className="text-blue-500 mr-2">•</span>
+                                                                <span>{step}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+
+                                                <div>
+                                                    <h4 className="font-semibold text-gray-700 mb-3">Examples (Mga Halimbawa):</h4>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {guideCase.examples.map((ex, eIdx) => (
+                                                            <div key={eIdx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col">
+                                                                <div className="text-sm font-bold text-gray-400 mb-2 uppercase tracking-wide">Example {eIdx + 1}</div>
+                                                                <div className="font-mono text-lg text-gray-800 whitespace-pre-wrap flex-1 bg-gray-50 p-3 rounded">{ex.q}</div>
+                                                                <div className="mt-3 pt-3 border-t border-gray-100 font-mono text-sm text-green-700 whitespace-pre-wrap">
+                                                                    <strong>Answer:</strong><br/>{ex.a}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
