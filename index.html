@@ -4,20 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Math Practice Pro</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
+        .fraction { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 0.25rem; }
+        .fraction-num { padding: 0 0.2rem; font-weight: 600; line-height: 1; }
+        .fraction-line { border-top: 2px solid currentColor; width: 100%; margin: 2px 0; }
+        .fraction-den { padding: 0 0.2rem; font-weight: 600; line-height: 1; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-900">
+<body>
     <div id="root"></div>
 
     <script type="module">
@@ -35,968 +35,691 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-
-        // Make Firebase functions globally available to React
-        window.saveScoreToFirebase = async (scoreData) => {
-            try {
-                await addDoc(collection(db, "math_scores"), scoreData);
-                console.log("Score saved to Firebase!");
-            } catch (e) {
-                console.error("Error saving to Firebase: ", e);
-            }
-        };
-
-        window.getScoresFromFirebase = async () => {
-            try {
-                const q = query(collection(db, "math_scores"));
-                const querySnapshot = await getDocs(q);
-                let scores = [];
-                querySnapshot.forEach((doc) => {
-                    scores.push({ id: doc.id, ...doc.data() });
-                });
-                return scores;
-            } catch (e) {
-                console.error("Error fetching from Firebase: ", e);
-                return [];
-            }
-        };
+        window.firebaseDb = db;
+        window.firebaseCollection = collection;
+        window.firebaseAddDoc = addDoc;
+        window.firebaseGetDocs = getDocs;
+        window.firebaseQuery = query;
+        window.firebaseOrderBy = orderBy;
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect } = React;
 
-        const CATEGORIES = [
-            { id: 'whole_add', label: 'Addition', group: 'Whole Numbers' },
-            { id: 'whole_sub', label: 'Subtraction', group: 'Whole Numbers' },
-            { id: 'whole_mul', label: 'Multiplication', group: 'Whole Numbers' },
-            { id: 'whole_div', label: 'Division', group: 'Whole Numbers' },
-            { id: 'whole_mixed', label: 'Mixed Operations', group: 'Whole Numbers' },
-
-            { id: 'dec_add', label: 'Addition', group: 'Decimals' },
-            { id: 'dec_sub', label: 'Subtraction', group: 'Decimals' },
-            { id: 'dec_mul', label: 'Multiplication', group: 'Decimals' },
-            { id: 'dec_div', label: 'Division', group: 'Decimals' },
-            { id: 'dec_mixed', label: 'Mixed Operations', group: 'Decimals' },
-
-            { id: 'frac_add', label: 'Addition', group: 'Fractions' },
-            { id: 'frac_sub', label: 'Subtraction', group: 'Fractions' },
-            { id: 'frac_mul', label: 'Multiplication', group: 'Fractions' },
-            { id: 'frac_div', label: 'Division', group: 'Fractions' },
-            { id: 'frac_simplify', label: 'Simplifying Fractions', group: 'Fractions' },
-            { id: 'frac_mixed', label: 'Mixed Operations', group: 'Fractions' },
-
-            { id: 'int_add', label: 'Addition', group: 'Integers' },
-            { id: 'int_sub', label: 'Subtraction', group: 'Integers' },
-            { id: 'int_mul', label: 'Multiplication', group: 'Integers' },
-            { id: 'int_div', label: 'Division', group: 'Integers' },
-            { id: 'int_mixed', label: 'Mixed Operations', group: 'Integers' },
-
-            { id: 'perc_base', label: 'Find the Base', group: 'Percentages' },
-            { id: 'perc_rate', label: 'Find the Rate/Percent', group: 'Percentages' },
-            { id: 'perc_value', label: 'Find the Value/Percentage', group: 'Percentages' },
-
-            { id: 'exponents', label: 'Evaluating Exponents', group: 'Advanced' },
-            { id: 'laws_exp', label: 'Laws of Exponents', group: 'Advanced' },
-        ];
-
+        // --- COMPREHENSIVE GUIDES DATA ---
         const GUIDES_DATA = {
-            'whole_add': {
-                title: 'Whole Numbers: Addition (Pagdaragdag)',
-                cases: [
-                    {
-                        name: 'Case 1: Without Regrouping (Walang Carry)',
-                        steps: [
-                            '1. Line up the numbers by their place value (Pagtapatin ang mga numero).',
-                            '2. Add the digits starting from the rightmost column (Magsimula mag-add sa kanan).'
-                        ],
-                        examples: [
-                            { q: '  24\n+ 15', a: '  39\n(4+5=9, 2+1=3)' },
-                            { q: '  152\n+ 234', a: '  386\n(2+4=6, 5+3=8, 1+2=3)' }
-                        ]
-                    },
-                    {
-                        name: 'Case 2: With Regrouping (May Carry)',
-                        steps: [
-                            '1. Line up the numbers.',
-                            '2. Add from right to left. If a column sum is 10 or more, write down the ones digit and "carry" the tens digit to the next column on the left (Kung 10 o higit pa, isulat ang nasa kanan at i-carry ang nasa kaliwa).'
-                        ],
-                        examples: [
-                            { q: '  47\n+ 35', a: '  82\n(7+5=12. Write 2, carry 1. 1+4+3=8)' },
-                            { q: '  289\n+ 143', a: '  432\n(9+3=12 carry 1; 1+8+4=13 carry 1; 1+2+1=4)' }
-                        ]
-                    }
-                ]
+            "Whole Numbers": {
+                eng: {
+                    desc: "Whole numbers are counting numbers including zero (0, 1, 2, 3...). There are no fractions or decimals involved.",
+                    steps: [
+                        "Addition (With/Without Regrouping): Align the numbers vertically by their place value (ones, tens, hundreds). Add column by column starting from the right. If a column's sum is 10 or greater, write the ones digit and carry over the tens digit to the next column.",
+                        "Subtraction (With/Without Regrouping): Align vertically. Subtract from right to left. If the top digit is smaller than the bottom digit, borrow 1 from the next left column (which adds 10 to your current top digit).",
+                        "Multiplication: Align the numbers. Multiply the top number by the ones digit of the bottom number. Then, multiply by the tens digit, placing a zero (0) as a placeholder on the new row. Finally, add all the partial products together.",
+                        "Division: Use long division. 1) Divide the first digit(s) of the dividend by the divisor. 2) Multiply the quotient by the divisor. 3) Subtract the result. 4) Bring down the next digit. 5) Repeat until finished."
+                    ],
+                    examples: [
+                        { type: 'vertical', label: 'Addition', num1: '458', op: '+', num2: '275', ans: '733', explanation: '8+5=13 (carry 1). 1+5+7=13 (carry 1). 1+4+2=7. Answer: 733' }, 
+                        { type: 'vertical', label: 'Subtraction', num1: '502', op: '-', num2: '184', ans: '318', explanation: 'Borrow from 50. 12-4=8. 9-8=1. 4-1=3. Answer: 318' },
+                        { type: 'vertical', label: 'Multiplication', num1: '24', op: 'x', num2: '13', steps: ['72', '240'], ans: '312', explanation: '24x3=72. 24x10=240. 72+240=312. Answer: 312' },
+                        "Division: 144 ÷ 12 -> 12 goes into 14 one time (remainder 2). Bring down 4 to make 24. 12 goes into 24 two times. Answer: 12"
+                    ]
+                },
+                fil: {
+                    desc: "Ang mga whole numbers ay mga buong numero kasama ang zero. Wala itong butal, fraction, o decimal.",
+                    steps: [
+                        "Addition (Pagdaragdag): I-align ang mga numero pataas-pababa ayon sa place value. Mag-add mula sa pinakakanan. Kung 10 o higit pa ang sagot sa isang hanay, isulat ang ones digit at i-carry over ang tens digit sa susunod na hanay.",
+                        "Subtraction (Pagbabawas): I-align pataas-pababa. Mag-subtract mula kanan pakaliwa. Kung mas maliit ang itaas na numero, manghiram (borrow) ng 1 sa katabing hanay sa kaliwa (magiging +10 sa kasalukuyang numero).",
+                        "Multiplication (Pagpaparami): I-multiply ang itaas na numero sa bawat digit ng ibaba. Kapag lumipat ka sa tens digit, maglagay ng zero (0) sa simula ng bagong linya. I-add ang lahat ng nakuha mong sagot (partial products).",
+                        "Division (Paghahati): Gamitin ang long division. I-divide ang unang bahagi ng dividend sa divisor. I-multiply, i-subtract, at ibaba ang susunod na digit. Ulitin hanggang matapos."
+                    ],
+                    examples: [
+                        { type: 'vertical', label: 'Addition', num1: '458', op: '+', num2: '275', ans: '733', explanation: '8+5=13 (carry 1). 1+5+7=13 (carry 1). 1+4+2=7. Sagot: 733' }, 
+                        { type: 'vertical', label: 'Subtraction', num1: '502', op: '-', num2: '184', ans: '318', explanation: 'Manghiram sa 50. 12-4=8. 9-8=1. 4-1=3. Sagot: 318' },
+                        { type: 'vertical', label: 'Multiplication', num1: '24', op: 'x', num2: '13', steps: ['72', '240'], ans: '312', explanation: '24x3=72. 24x10=240. 72+240=312. Sagot: 312' },
+                        "Division: 144 ÷ 12 -> Ang 12 sa 14 ay 1 (may sobrang 2). Ibaba ang 4 para maging 24. Ang 12 sa 24 ay 2. Sagot: 12"
+                    ]
+                }
             },
-            'whole_sub': {
-                title: 'Whole Numbers: Subtraction (Pagbabawas)',
-                cases: [
-                    {
-                        name: 'Case 1: Without Regrouping (Walang Borrow)',
-                        steps: [
-                            '1. Line up the numbers. The larger number must be on top.',
-                            '2. Subtract the bottom digit from the top digit, starting from the right (Ibawas ang nasa ibaba mula sa nasa itaas, simula kanan).'
-                        ],
-                        examples: [
-                            { q: '  87\n- 35', a: '  52\n(7-5=2, 8-3=5)' },
-                            { q: '  964\n- 241', a: '  723\n(4-1=3, 6-4=2, 9-2=7)' }
-                        ]
-                    },
-                    {
-                        name: 'Case 2: With Regrouping (May Borrow)',
-                        steps: [
-                            '1. Start subtracting from the right.',
-                            '2. If the top digit is smaller than the bottom digit, borrow 1 from the next column to the left. That 1 becomes 10 for the current column (Manghiram ng 1 sa katabi pakaliwa. Ang hiniram ay magiging 10 na idadagdag sa kasalukuyang numero).'
-                        ],
-                        examples: [
-                            { q: '  52\n- 28', a: '  24\n(2 < 8, borrow from 5. 5 becomes 4, 2 becomes 12. 12-8=4. 4-2=2)' },
-                            { q: '  304\n- 157', a: '  147\n(4 < 7, borrow from 0. 0 borrows from 3. 3 becomes 2, 0 becomes 10. Now borrow from 10. 10 becomes 9, 4 becomes 14. 14-7=7. 9-5=4. 2-1=1)' }
-                        ]
-                    }
-                ]
+            "Decimals": {
+                eng: {
+                    desc: "Decimals represent parts of a whole, based on powers of 10. They are written with a decimal point.",
+                    steps: [
+                        "Addition & Subtraction: Write the numbers vertically, lining up the decimal points exactly. Add zeros to the end of the numbers if needed to make them the same length. Add or subtract as usual, and bring the decimal point straight down into the answer.",
+                        "Multiplication: Multiply the numbers normally, ignoring the decimal points temporarily. Then, count the total number of decimal places in both original numbers. Place the decimal point in your answer so it has that same total number of decimal places.",
+                        "Division: Make the divisor (the outside number) a whole number by moving its decimal to the right. Move the dividend's (the inside number) decimal the exact same number of spaces to the right. Divide normally and put the decimal in the quotient directly above the new decimal in the dividend."
+                    ],
+                    examples: [
+                        { type: 'vertical', label: 'Addition', num1: '2.50', op: '+', num2: '1.35', ans: '3.85', explanation: 'Line up decimal points: 2.5 becomes 2.50. Then add normally.' }, 
+                        { type: 'vertical', label: 'Subtraction', num1: '5.20', op: '-', num2: '1.45', ans: '3.75', explanation: 'Line up decimal points: 5.2 becomes 5.20. Borrow and subtract.' },
+                        { type: 'vertical', label: 'Multiplication', num1: '0.5', op: 'x', num2: '0.02', ans: '0.010', explanation: '5x2=10. We have 1 + 2 = 3 total decimal places. Move 3 spaces left: 0.010 or 0.01' },
+                        "Division: 1.25 ÷ 0.5 -> Move decimals 1 space right: 12.5 ÷ 5 = 2.5"
+                    ]
+                },
+                fil: {
+                    desc: "Ang decimals ay nagpapakita ng bahagi ng isang buo na gumagamit ng decimal point.",
+                    steps: [
+                        "Addition & Subtraction: Isulat pataas-pababa at itapat nang direkta ang mga decimal points. Magdagdag ng zero sa dulo ng mga numero kung kailangan para magkapantay. Gawin ang operasyon at ibaba ng diretso ang decimal point sa sagot.",
+                        "Multiplication: I-multiply ang mga numero na parang whole numbers (pansamantalang kalimutan ang decimal point). Bilangin kung ilang decimal places ang meron sa lahat ng numero. Ilagay ang decimal point sa sagot gamit ang kabuuang bilang na iyon.",
+                        "Division: Gawing buong numero (whole number) ang divisor sa pamamagitan ng paglipat ng decimal nito pakanan. Ilipat din ang decimal ng dividend ng parehong bilang ng hakbang. I-divide nang normal at itaas ang decimal point sa pinal na sagot."
+                    ],
+                    examples: [
+                        { type: 'vertical', label: 'Addition', num1: '2.50', op: '+', num2: '1.35', ans: '3.85', explanation: 'Itapat ang tuldok (decimal point): Ang 2.5 ay magiging 2.50. I-add nang normal.' }, 
+                        { type: 'vertical', label: 'Subtraction', num1: '5.20', op: '-', num2: '1.45', ans: '3.75', explanation: 'Itapat ang tuldok: Ang 5.2 ay magiging 5.20. Manghiram at i-subtract.' },
+                        { type: 'vertical', label: 'Multiplication', num1: '0.5', op: 'x', num2: '0.02', ans: '0.010', explanation: '5x2=10. May 1 + 2 = 3 decimal places. Ilipat pakaliwa: 0.010 o 0.01' },
+                        "Division: 1.25 ÷ 0.5 -> Ilipat ang decimal pakanan ng 1 beses: 12.5 ÷ 5 = 2.5"
+                    ]
+                }
             },
-            'whole_mul': {
-                title: 'Whole Numbers: Multiplication (Pagpaparami)',
-                cases: [
-                    {
-                        name: 'Case 1: Multiplier Steps',
-                        steps: [
-                            '1. Multiply the bottom digit by each top digit, starting from the right (I-multiply ang ibaba sa bawat numero sa itaas simula kanan).',
-                            '2. Carry over tens digits if the product is 10 or more.',
-                            '3. If multi-digit, put a zero placeholder (0) below before multiplying by the next digit.'
-                        ],
-                        examples: [
-                            { q: '  47\nx  6', a: ' 282\n(6x7=42, write 2 carry 4. 6x4=24, 24+4=28)' },
-                            { q: '  23\nx 14', a: '  92  (4 x 23)\n+230  (10 x 23)\n----\n 322' }
-                        ]
-                    }
-                ]
+            "Fractions": {
+                eng: {
+                    desc: "Fractions represent equal parts of a whole. A fraction has a numerator (top number) and a denominator (bottom number).",
+                    steps: [
+                        "Adding/Subtracting Similar Fractions: If the denominators are the same, simply add or subtract the numerators and keep the denominator exactly the same. Simplify the answer if possible.",
+                        "Adding/Subtracting Dissimilar Fractions: Find the Least Common Denominator (LCD). Convert each fraction to an equivalent fraction using the LCD. Then, add or subtract the numerators and keep the new denominator. Simplify.",
+                        "Multiplication: Multiply the numerators straight across to get the new numerator. Multiply the denominators straight across to get the new denominator. Simplify the resulting fraction to its lowest terms.",
+                        "Division: Keep the first fraction as is. Change the division symbol to multiplication. Flip the second fraction upside down (find its reciprocal). Multiply straight across and simplify.",
+                        "Simplifying Fractions: Find the Greatest Common Factor (GCF) of the numerator and the denominator. Divide both the top and bottom numbers by the GCF."
+                    ],
+                    examples: [
+                        "Similar Add: 1/5 + 2/5 = 3/5", 
+                        "Dissimilar Add: 1/2 + 1/3 -> LCD is 6. Convert: 3/6 + 2/6 = 5/6",
+                        "Multiplication: 2/3 x 3/4 = 6/12 . Divide top and bottom by 6 to simplify -> 1/2",
+                        "Division: 3/4 ÷ 1/2 -> Keep, Change, Flip: 3/4 x 2/1 = 6/4 . Simplify -> 3/2",
+                        "Simplifying: 8/12 -> GCF is 4. Divide both by 4 -> 2/3"
+                    ]
+                },
+                fil: {
+                    desc: "Ang fractions ay bahagi ng isang buo. Mayroon itong numerator (numero sa itaas) at denominator (numero sa ibaba).",
+                    steps: [
+                        "Adding/Subtracting Parehong Denominator: Kung pareho ang denominator, i-add o i-subtract lang ang mga numerators at kopyahin ang denominator. I-simplify kung maaari.",
+                        "Adding/Subtracting Magkaibang Denominator: Hanapin muna ang Least Common Denominator (LCD). Baguhin ang mga fractions para magamit ang LCD. Kapag pareho na, i-add o i-subtract ang numerators. I-simplify ang sagot.",
+                        "Multiplication: I-multiply nang diretso ang mga numerators. I-multiply din nang diretso ang mga denominators. I-simplify ang fraction sa pinakamababang terms.",
+                        "Division: Kopyahin ang unang fraction. Palitan ang division sign ng multiplication sign. Baliktarin ang pangalawang fraction (reciprocal). I-multiply nang diretso at i-simplify.",
+                        "Simplifying: Hanapin ang Greatest Common Factor (GCF) o pinakamalaking numerong pwedeng i-divide sa numerator at denominator. I-divide ang dalawa sa GCF."
+                    ],
+                    examples: [
+                        "Parehong Denom: 1/5 + 2/5 = 3/5", 
+                        "Magkaibang Denom: 1/2 + 1/3 -> LCD ay 6. Palitan: 3/6 + 2/6 = 5/6",
+                        "Multiplication: 2/3 x 3/4 = 6/12 . I-divide ang dalawa sa 6 para i-simplify -> 1/2",
+                        "Division: 3/4 ÷ 1/2 -> Kopyahin, Palitan, Baliktarin: 3/4 x 2/1 = 6/4 . I-simplify -> 3/2",
+                        "Simplifying: 8/12 -> Ang GCF ay 4. I-divide sa 4 -> 2/3"
+                    ]
+                }
             },
-            'whole_div': {
-                title: 'Whole Numbers: Division (Paghahati)',
-                cases: [
-                    {
-                        name: 'Case 1: Long Division',
-                        steps: [
-                            '1. Divide: How many times does the outside fit inside? (Ilang beses kasya?)',
-                            '2. Multiply your answer by the outside number.',
-                            '3. Subtract the result and bring down the next digit.'
-                        ],
-                        examples: [
-                            { q: '75 ÷ 5', a: ' 15\n(5 fits into 7 once. 1x5=5. 7-5=2. Bring down 5 = 25. 5 into 25 = 5. 5x5=25.)' }
-                        ]
-                    }
-                ]
+            "Integers": {
+                eng: {
+                    desc: "Integers are positive and negative whole numbers, including zero. They have specific rules for operations based on their signs (+ or -).",
+                    steps: [
+                        "Addition (Same Signs): If both numbers have the same sign, simply add their absolute values and keep the common sign. (Positive + Positive = Positive, Negative + Negative = Negative).",
+                        "Addition (Different Signs): If the numbers have different signs, subtract the smaller absolute value from the larger one. The answer takes the sign of the number with the larger absolute value.",
+                        "Subtraction: Use the 'Keep, Change, Change' rule. Keep the first number as is. Change the subtraction sign to addition. Change the sign of the second number to its opposite. Then follow the Addition rules.",
+                        "Multiplication & Division: Multiply or divide the numbers normally. If the signs are the SAME (both + or both -), the answer is POSITIVE. If the signs are DIFFERENT (one +, one -), the answer is NEGATIVE."
+                    ],
+                    examples: [
+                        { type: 'vertical', label: 'Addition (Same)', num1: '-4', op: '+', num2: '-5', ans: '-9', explanation: 'Same signs: add 4+5=9, keep the negative sign.' }, 
+                        { type: 'vertical', label: 'Addition (Different)', num1: '-10', op: '+', num2: '6', ans: '-4', explanation: 'Different signs: subtract 10-6=4. 10 is larger and negative, so answer is -4.' },
+                        { type: 'vertical', label: 'Subtraction', num1: '-5', op: '-', num2: '3', ans: '-8', explanation: 'Keep, Change, Change -> -5 + -3 = -8' },
+                        "Multiplication: -6 x -3 = 18 (Same signs = Positive)",
+                        "Division: -20 ÷ 4 = -5 (Different signs = Negative)"
+                    ]
+                },
+                fil: {
+                    desc: "Ang integers ay mga positibo at negatibong whole numbers, kasama ang zero. Mayroon silang partikular na rules depende sa kanilang sign (+ o -).",
+                    steps: [
+                        "Addition (Parehong Sign): Kung pareho ang sign, i-add lang ang kanilang absolute values at kopyahin ang sign. (Positibo + Positibo = Positibo, Negatibo + Negatibo = Negatibo).",
+                        "Addition (Magkaibang Sign): Kung magkaiba ang sign, i-subtract ang mas maliit na absolute value sa mas malaki. Kopyahin ang sign ng numero na may mas malaking absolute value.",
+                        "Subtraction (Pagbabawas): Gamitin ang 'Keep, Change, Change'. Kopyahin ang unang numero. Gawing addition ang subtraction sign. Baliktarin ang sign ng pangalawang numero. Pagkatapos, sundin ang rules ng Addition.",
+                        "Multiplication & Division: I-multiply o i-divide nang normal. Kung PAREHO ang sign, ang sagot ay POSITIBO. Kung MAGKAIBA ang sign, ang sagot ay NEGATIBO."
+                    ],
+                    examples: [
+                        { type: 'vertical', label: 'Addition (Pareho)', num1: '-4', op: '+', num2: '-5', ans: '-9', explanation: 'Parehong sign: i-add ang 4+5=9, kopyahin ang negatibong sign.' }, 
+                        { type: 'vertical', label: 'Addition (Magkaiba)', num1: '-10', op: '+', num2: '6', ans: '-4', explanation: 'Magkaibang sign: i-subtract 10-6=4. Mas malaki ang 10 at negatibo, kaya sagot ay -4.' },
+                        { type: 'vertical', label: 'Subtraction', num1: '-5', op: '-', num2: '3', ans: '-8', explanation: 'Keep, Change, Change -> -5 + -3 = -8' },
+                        "Multiplication: -6 x -3 = 18 (Parehong sign = Positibo)",
+                        "Division: -20 ÷ 4 = -5 (Magkaibang sign = Negatibo)"
+                    ]
+                }
             },
-            'whole_mixed': {
-                title: 'Whole Numbers: Mixed Operations',
-                cases: [{ name: 'Order of Operations (PEMDAS)', steps: ['1. Follow standard order: Parentheses, Exponents, Multiplication/Division, Addition/Subtraction.'], examples: [{ q: '5 + 3 x 2', a: '11\n(Multiply first: 3x2=6. Then 5+6=11)' }] }]
+            "Percentages": {
+                eng: {
+                    desc: "A percentage is a number expressed as a fraction of 100. The core formula is: Percentage = Base x Rate (P = B x R).",
+                    steps: [
+                        "Finding the Percentage (Value): You are given the Base (total) and the Rate (the number with the % sign). 1) Convert the Rate to a decimal by moving the decimal point 2 spaces left. 2) Multiply the Base by this decimal.",
+                        "Finding the Rate (%): You are given the Percentage and the Base. 1) Divide the Percentage value by the Base value. 2) Multiply the result by 100 and add the '%' sign to make it a rate.",
+                        "Finding the Base (Total): You are given the Percentage and the Rate. 1) Convert the Rate to a decimal. 2) Divide the Percentage by this decimal to find the original total Base."
+                    ],
+                    examples: [
+                        "Find Percentage: What is 15% of 60? -> Rate=15%, Base=60. 15% = 0.15. 60 x 0.15 = 9", 
+                        "Find Rate: 12 is what percent of 48? -> Percentage=12, Base=48. 12 ÷ 48 = 0.25. 0.25 x 100 = 25%",
+                        "Find Base: 20 is 40% of what number? -> Percentage=20, Rate=40%. 40% = 0.40. 20 ÷ 0.40 = 50"
+                    ]
+                },
+                fil: {
+                    desc: "Ang percentage ay nagpapakita ng bahagi ng 100. Ang pangunahing pormula ay: Percentage = Base x Rate (P = B x R).",
+                    steps: [
+                        "Paghahanap ng Percentage (Value): Ibinigay ang Base (kabuuan) at Rate (ang may % sign). 1) Gawing decimal ang Rate (ilipat ang decimal point 2 beses pakaliwa). 2) I-multiply ang Base sa decimal na ito.",
+                        "Paghahanap ng Rate (%): Ibinigay ang Percentage at Base. 1) I-divide ang Percentage sa Base. 2) I-multiply ang sagot sa 100 at lagyan ng '%' sign.",
+                        "Paghahanap ng Base (Total): Ibinigay ang Percentage at Rate. 1) Gawing decimal ang Rate. 2) I-divide ang Percentage sa decimal na ito para makuha ang kabuuan (Base)."
+                    ],
+                    examples: [
+                        "Hanapin ang Percentage: Ano ang 15% ng 60? -> Rate=15%, Base=60. 15% = 0.15. 60 x 0.15 = 9", 
+                        "Hanapin ang Rate: Ang 12 ay ilang porsyento ng 48? -> Percentage=12, Base=48. 12 ÷ 48 = 0.25. 0.25 x 100 = 25%",
+                        "Hanapin ang Base: Ang 20 ay 40% ng anong numero? -> Percentage=20, Rate=40%. 40% = 0.40. 20 ÷ 0.40 = 50"
+                    ]
+                }
             },
-            'dec_add': {
-                title: 'Decimals: Addition',
-                cases: [{ name: 'Aligning the Decimal Point', steps: ['1. Line up the decimal points.', '2. Add zeros to the end if necessary to make them the same length.', '3. Add normally and bring down the decimal point.'], examples: [{ q: '2.5 + 1.25', a: '3.75\n(2.50 + 1.25 = 3.75)' }] }]
-            },
-            'dec_sub': {
-                title: 'Decimals: Subtraction',
-                cases: [{ name: 'Aligning the Decimal Point', steps: ['1. Line up the decimal points.', '2. Add zeros to the end if needed.', '3. Subtract normally and bring down the decimal.'], examples: [{ q: '5.4 - 2.15', a: '3.25\n(5.40 - 2.15 = 3.25)' }] }]
-            },
-            'dec_mul': {
-                title: 'Decimals: Multiplication',
-                cases: [{ name: 'Counting Decimal Places', steps: ['1. Multiply normally, ignoring decimals.', '2. Count the total number of decimal places in the problem.', '3. Give the answer that same number of decimal places.'], examples: [{ q: '1.2 x 0.3', a: '0.36\n(12x3=36. Total 2 decimal places -> 0.36)' }] }]
-            },
-            'dec_div': {
-                title: 'Decimals: Division',
-                cases: [{ name: 'Dividing by a Decimal', steps: ['1. Move the decimal point of the outside number (divisor) right until it is whole.', '2. Move the inside number (dividend) decimal the same number of places.', '3. Divide normally and bring decimal straight up.'], examples: [{ q: '1.25 ÷ 0.5', a: '2.5\n(Move 1 place: 12.5 ÷ 5 = 2.5)' }] }]
-            },
-            'dec_mixed': {
-                title: 'Decimals: Mixed Operations',
-                cases: [{ name: 'Order of Operations (PEMDAS)', steps: ['1. Follow standard order: Parentheses, Exponents, Multiplication/Division, Addition/Subtraction.'], examples: [{ q: '1.5 + 2 x 0.5', a: '2.5\n(Multiply first: 2x0.5=1. Then 1.5+1=2.5)' }] }]
-            },
-            'frac_add': {
-                title: 'Fractions: Addition',
-                cases: [
-                    {
-                        name: 'Case 1: Similar Fractions (Parehas na Ibaba)',
-                        steps: [
-                            '1. Add the numerators (top numbers) (Idagdag lang ang nasa itaas).',
-                            '2. Keep the denominator the same. Simplify if needed.'
-                        ],
-                        examples: [
-                            { q: '1/5 + 2/5', a: '3/5\n(1+2=3, keep 5)' }
-                        ]
-                    },
-                    {
-                        name: 'Case 2: Dissimilar Fractions (Magkaiba ang Ibaba)',
-                        steps: [
-                            '1. Find the Least Common Denominator (LCD).',
-                            '2. Convert both to equivalent fractions (Gawing pareho ang ibaba).',
-                            '3. Add numerators.'
-                        ],
-                        examples: [
-                            { q: '1/2 + 1/3', a: '5/6\n(LCD is 6. 1/2 = 3/6. 1/3 = 2/6. 3/6 + 2/6 = 5/6)' }
-                        ]
-                    }
-                ]
-            },
-            'frac_sub': {
-                title: 'Fractions: Subtraction',
-                cases: [
-                    {
-                        name: 'Case 1: Similar Fractions',
-                        steps: [
-                            '1. Subtract the numerators (top numbers).',
-                            '2. Keep the denominator the same. Simplify if needed.'
-                        ],
-                        examples: [
-                            { q: '4/5 - 1/5', a: '3/5\n(4-1=3, keep 5)' }
-                        ]
-                    },
-                    {
-                        name: 'Case 2: Dissimilar Fractions',
-                        steps: [
-                            '1. Find the Least Common Denominator (LCD).',
-                            '2. Convert both to equivalent fractions.',
-                            '3. Subtract the numerators.'
-                        ],
-                        examples: [
-                            { q: '3/4 - 1/3', a: '5/12\n(LCD is 12. 3/4=9/12, 1/3=4/12. 9/12-4/12=5/12)' }
-                        ]
-                    }
-                ]
-            },
-            'frac_mul': {
-                title: 'Fractions: Multiplication',
-                cases: [
-                    {
-                        name: 'Case 1: Multiplying Fractions',
-                        steps: [
-                            '1. Multiply the numerators (top x top).',
-                            '2. Multiply the denominators (bottom x bottom).',
-                            '3. Simplify the resulting fraction.'
-                        ],
-                        examples: [
-                            { q: '2/3 x 4/5', a: '8/15\n(2x4=8, 3x5=15)' }
-                        ]
-                    }
-                ]
-            },
-            'frac_div': {
-                title: 'Fractions: Division',
-                cases: [
-                    {
-                        name: 'Case 1: Keep-Change-Flip (KCF)',
-                        steps: [
-                            '1. KEEP the first fraction.',
-                            '2. CHANGE division to multiplication.',
-                            '3. FLIP the second fraction (use reciprocal).',
-                            '4. Multiply normally.'
-                        ],
-                        examples: [
-                            { q: '2/3 ÷ 4/5', a: '10/12 -> 5/6\n(Keep 2/3, Change to x, Flip to 5/4. 2/3 x 5/4 = 10/12 = 5/6)' }
-                        ]
-                    }
-                ]
-            },
-            'frac_simplify': {
-                title: 'Fractions: Simplifying',
-                cases: [
-                    {
-                        name: 'Case 1: Finding Lowest Terms',
-                        steps: [
-                            '1. Find the Greatest Common Factor (GCF) of numerator and denominator.',
-                            '2. Divide both top and bottom by the GCF.'
-                        ],
-                        examples: [
-                            { q: 'Simplify 8/12', a: '2/3\n(GCF is 4. 8÷4=2, 12÷4=3)' }
-                        ]
-                    }
-                ]
-            },
-            'frac_mixed': {
-                title: 'Fractions: Mixed Operations',
-                cases: [
-                    {
-                        name: 'Case 1: Order of Operations',
-                        steps: ['1. Use PEMDAS. Multiply/Divide first, then Add/Subtract.'],
-                        examples: [{ q: '1/2 + 2/3 x 3/4', a: '1\n(Multiply: 2/3 x 3/4 = 6/12 = 1/2. Add: 1/2 + 1/2 = 1)' }]
-                    }
-                ]
-            },
-            'int_add': {
-                title: 'Integers: Addition',
-                cases: [
-                    {
-                        name: 'Case 1: Same Signs (Parehong Positibo o Negatibo)',
-                        steps: [
-                            '1. Add the numbers normally, ignoring the signs.',
-                            '2. Keep their common sign (Kopyahin ang sign).'
-                        ],
-                        examples: [
-                            { q: '(-4) + (-2)', a: '-6 (Add 4+2=6, keep negative sign)' }
-                        ]
-                    },
-                    {
-                        name: 'Case 2: Different Signs (Magkaibang Sign)',
-                        steps: [
-                            '1. Subtract the smaller number from the larger number.',
-                            '2. Keep the sign of the larger number.'
-                        ],
-                        examples: [
-                            { q: '-7 + 3', a: '-4 (Subtract 7-3=4. 7 is larger and negative, so -4)' }
-                        ]
-                    }
-                ]
-            },
-            'int_sub': {
-                title: 'Integers: Subtraction',
-                cases: [
-                    {
-                        name: 'Case 1: Keep-Change-Change',
-                        steps: [
-                            '1. Keep the first number exactly the same.',
-                            '2. Change subtraction to addition.',
-                            '3. Change the sign of the second number to its opposite.',
-                            '4. Follow addition rules.'
-                        ],
-                        examples: [
-                            { q: '5 - (-3)', a: '8\n(5 + 3 = 8)' },
-                            { q: '-7 - 4', a: '-11\n(-7 + -4 = -11)' }
-                        ]
-                    }
-                ]
-            },
-            'int_mul': {
-                title: 'Integers: Multiplication',
-                cases: [
-                    {
-                        name: 'Case 1: Multiplication Rules',
-                        steps: [
-                            '1. Multiply normally.',
-                            '2. Same signs = POSITIVE (+).',
-                            '3. Different signs = NEGATIVE (-).'
-                        ],
-                        examples: [
-                            { q: '(-4) x (-5)', a: '20\n(Same signs -> positive)' },
-                            { q: '(-6) x 3', a: '-18\n(Different signs -> negative)' }
-                        ]
-                    }
-                ]
-            },
-            'int_div': {
-                title: 'Integers: Division',
-                cases: [
-                    {
-                        name: 'Case 1: Division Rules',
-                        steps: [
-                            '1. Divide normally.',
-                            '2. Same signs = POSITIVE (+).',
-                            '3. Different signs = NEGATIVE (-).'
-                        ],
-                        examples: [
-                            { q: '(-20) ÷ (-4)', a: '5\n(Same signs -> positive)' },
-                            { q: '18 ÷ (-6)', a: '-3\n(Different signs -> negative)' }
-                        ]
-                    }
-                ]
-            },
-            'int_mixed': {
-                title: 'Integers: Mixed Operations',
-                cases: [
-                    {
-                        name: 'Case 1: PEMDAS',
-                        steps: ['1. Follow Order of Operations (Parentheses, Exponents, Multiply/Divide, Add/Subtract).'],
-                        examples: [{ q: '-3 + 4 x (-2)', a: '-11\n(Multiply: 4 x -2 = -8. Add: -3 + -8 = -11)' }]
-                    }
-                ]
-            },
-            'perc_base': {
-                title: 'Percentages: Find the Base',
-                cases: [
-                    {
-                        name: 'Formula: Base = Percentage ÷ Rate',
-                        steps: [
-                            '1. Convert the rate (percent) to a decimal.',
-                            '2. Divide the value (percentage) by the decimal.'
-                        ],
-                        examples: [
-                            { q: '15 is 30% of what?', a: '50\n(30% = 0.30. 15 ÷ 0.30 = 50)' }
-                        ]
-                    }
-                ]
-            },
-            'perc_rate': {
-                title: 'Percentages: Find the Rate/Percent',
-                cases: [
-                    {
-                        name: 'Formula: Rate = (Percentage ÷ Base) x 100',
-                        steps: [
-                            '1. Divide the value by the base.',
-                            '2. Multiply by 100 and add %.'
-                        ],
-                        examples: [
-                            { q: '20 is what percent of 80?', a: '25%\n(20 ÷ 80 = 0.25. 0.25 x 100 = 25%)' }
-                        ]
-                    }
-                ]
-            },
-            'perc_value': {
-                title: 'Percentages: Find Value',
-                cases: [
-                    {
-                        name: 'Formula: Percentage = Rate x Base',
-                        steps: [
-                            '1. Convert percent to decimal (divide by 100).',
-                            '2. Multiply by the Base number.'
-                        ],
-                        examples: [
-                            { q: 'What is 15% of 60?', a: '9\n(0.15 x 60 = 9)' }
-                        ]
-                    }
-                ]
-            },
-            'exponents': {
-                title: 'Advanced: Evaluating Exponents',
-                cases: [
-                    {
-                        name: 'Case 1: Base and Power',
-                        steps: [
-                            '1. Identify base (large number) and exponent (small number).',
-                            '2. Multiply the base by itself the number of times indicated by exponent.'
-                        ],
-                        examples: [
-                            { q: '3^4', a: '81\n(3 x 3 x 3 x 3 = 81)' }
-                        ]
-                    }
-                ]
-            },
-            'laws_exp': {
-                title: 'Advanced: Laws of Exponents',
-                cases: [
-                    {
-                        name: 'Case 1: Product and Quotient Rules',
-                        steps: [
-                            '1. Product Rule: Multiplying same bases -> add exponents (x^a * x^b = x^(a+b)).',
-                            '2. Quotient Rule: Dividing same bases -> subtract exponents (x^a / x^b = x^(a-b)).',
-                            '3. Power Rule: (x^a)^b = x^(a*b).'
-                        ],
-                        examples: [
-                            { q: 'x^3 * x^2', a: 'x^5\n(Add 3 + 2 = 5)' },
-                            { q: '(x^2)^4', a: 'x^8\n(Multiply 2 x 4 = 8)' }
-                        ]
-                    }
-                ]
+            "Exponents": {
+                eng: {
+                    desc: "Exponents (or powers) show how many times a base number is multiplied by itself. There are specific laws for combining exponents.",
+                    steps: [
+                        "Evaluation: Identify the base and the exponent. Multiply the base by itself the number of times indicated by the exponent.",
+                        "Product Rule: x^a * x^b = x^(a+b) . When multiplying terms with the exact same base, keep the base and add their exponents.",
+                        "Quotient Rule: x^a / x^b = x^(a-b) . When dividing terms with the exact same base, keep the base and subtract the bottom exponent from the top exponent.",
+                        "Power of a Power Rule: (x^a)^b = x^(a*b) . When a term with an exponent is raised to another power, keep the base and multiply the two exponents."
+                    ],
+                    examples: [
+                        "Evaluate: 4^3 -> 4 x 4 x 4 = 64", 
+                        "Product Rule: y^2 * y^5 -> Base is 'y'. Add exponents 2+5. Answer: y^7",
+                        "Quotient Rule: a^8 / a^3 -> Base is 'a'. Subtract exponents 8-3. Answer: a^5",
+                        "Power Rule: (x^4)^3 -> Base is 'x'. Multiply exponents 4*3. Answer: x^12"
+                    ]
+                },
+                fil: {
+                    desc: "Ang Exponents (powers) ay nagpapakita kung ilang beses i-multiply ang base sa kanyang sarili. May mga batas para sa pagsasama ng mga exponents.",
+                    steps: [
+                        "Pag-evaluate: Alamin ang base at exponent. I-multiply ang base sa sarili nito ayon sa bilang ng exponent.",
+                        "Product Rule: x^a * x^b = x^(a+b) . Kapag nagmu-multiply ng may parehong base, kopyahin ang base at i-add ang kanilang mga exponents.",
+                        "Quotient Rule: x^a / x^b = x^(a-b) . Kapag nagdi-divide ng may parehong base, kopyahin ang base at i-subtract ang exponent ng ilalim sa exponent ng itaas.",
+                        "Power ng Power Rule: (x^a)^b = x^(a*b) . Kapag ang isang exponent ay may panibagong exponent, kopyahin ang base at i-multiply ang dalawang exponents."
+                    ],
+                    examples: [
+                        "Evaluate: 4^3 -> 4 x 4 x 4 = 64", 
+                        "Product Rule: y^2 * y^5 -> Ang base ay 'y'. I-add ang 2+5. Sagot: y^7",
+                        "Quotient Rule: a^8 / a^3 -> Ang base ay 'a'. I-subtract ang 8-3. Sagot: a^5",
+                        "Power Rule: (x^4)^3 -> Ang base ay 'x'. I-multiply ang 4*3. Sagot: x^12"
+                    ]
+                }
             }
         };
 
-        // Fallback for missing guide categories
-        CATEGORIES.forEach(cat => {
-            if (!GUIDES_DATA[cat.id]) {
-                GUIDES_DATA[cat.id] = {
-                    title: cat.label + ' (' + cat.group + ')',
-                    cases: [{
-                        name: 'General Guide',
-                        steps: ['Follow standard mathematical procedures for this topic.', 'Sundin ang mga karaniwang hakbang sa matematika para dito.'],
-                        examples: [{q: 'Example 1', a: 'Answer 1'}]
-                    }]
-                };
-            }
-        });
+        // --- MATH FORMATTER COMPONENT ---
+        const MathText = ({ text }) => {
+            if (typeof text !== 'string') return <span>{text}</span>;
+            const tokens = text.split(' ');
+            
+            return (
+                <span className="inline-flex flex-wrap items-center gap-x-1 justify-center align-middle">
+                    {tokens.map((token, i) => {
+                        // Check for fractions like 3/4 or -1/2 (with optional trailing punctuation)
+                        const fracMatch = token.match(/^(-?\d+)\/(-?\d+)([.,!?:;]*)$/);
+                        if (fracMatch) {
+                            const [_, num, den, punc] = fracMatch;
+                            return (
+                                <span key={i} className="inline-flex items-center mx-1">
+                                    <span className="fraction text-xl">
+                                        <span className="fraction-num">{num}</span>
+                                        <span className="fraction-line"></span>
+                                        <span className="fraction-den">{den}</span>
+                                    </span>
+                                    {punc && <span>{punc}</span>}
+                                </span>
+                            );
+                        }
+                        
+                        // Check for Exponents like x^2, (x^a)^b, or 3^4
+                        const expMatch = token.match(/^([a-zA-Z0-9_()-]+)\^([a-zA-Z0-9_()+-]+)([.,!?:;]*)$/);
+                        if (expMatch) {
+                            const [_, base, exp, punc] = expMatch;
+                            return (
+                                <span key={i} className="inline-flex items-baseline mx-1">
+                                    <span>{base}</span>
+                                    <sup className="text-sm font-semibold">{exp}</sup>
+                                    {punc && <span>{punc}</span>}
+                                </span>
+                            );
+                        }
 
-        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-        const generateNumberStr = (digits) => {
-            let num = randomInt(1, 9).toString();
-            for (let i = 1; i < digits; i++) {
-                num += randomInt(0, 9).toString();
-            }
+                        return <span key={i}>{token} </span>;
+                    })}
+                </span>
+            );
+        };
+
+        // --- UTILITY / GENERATOR LOGIC ---
+        const rInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min);
+        const gcf = (a, b) => b === 0 ? a : gcf(b, a % b);
+
+        const generateNumber = (digits, allowNegative = false) => {
+            let min = Math.pow(10, digits - 1);
+            let max = Math.pow(10, digits) - 1;
+            if (digits === 1) min = 1;
+            let num = rInt(min, max);
+            if (allowNegative && Math.random() > 0.5) num *= -1;
             return num;
         };
 
-        const generateProblemStr = (catId, settings) => {
-            let q = '', a = '';
-            let qParts = { left: '', operator: '', right: '' };
-            const digits = parseInt(settings.digits) || 2;
-            const isRegrouping = settings.regrouping; // with, without, mixed
-            const signs = settings.signs; // pos, neg, mixed
-
-            // Helper to generate digits based on sign settings
-            const getSignedNum = (val) => {
-                let isNeg = false;
-                if (signs === 'neg') isNeg = true;
-                if (signs === 'mixed') isNeg = Math.random() > 0.5;
-                return isNeg ? -val : val;
-            };
-
-            const formatSigned = (num) => num < 0 ? `(${num})` : `${num}`;
-
-            if (catId.startsWith('whole_') || catId.startsWith('int_') || catId.startsWith('dec_')) {
-                let type = catId.split('_')[1]; // add, sub, mul, div, mixed
-                const isDec = catId.startsWith('dec_');
-                const isInt = catId.startsWith('int_');
-
-                if (type === 'mixed') {
-                    const ops = ['add', 'sub', 'mul', 'div'];
-                    type = ops[Math.floor(Math.random() * ops.length)];
-                }
-
-                if (type === 'add') {
-                    let num1, num2;
-                    if (isRegrouping === 'without') {
-                        // Generate digits such that they don't exceed 9 when added
-                        let str1 = '', str2 = '';
-                        for(let i=0; i<digits; i++) {
-                            let d1 = randomInt(1, 8);
-                            let d2 = randomInt(0, 9 - d1);
-                            if(i===0 && d1===0) d1=1;
-                            if(i===0 && d2===0) d2=1;
-                            str1 += d1; str2 += d2;
-                        }
-                        num1 = parseInt(str1); num2 = parseInt(str2);
-                    } else if (isRegrouping === 'with') {
-                        // Force at least one carry
-                        let str1 = '', str2 = '';
-                        let hasCarry = false;
-                        for(let i=0; i<digits; i++) {
-                            let d1 = randomInt(1, 9);
-                            let d2 = randomInt(0, 9);
-                            if(!hasCarry && i === digits-1) d2 = randomInt(10-d1, 9) || 1; // force carry on last
-                            if(d1+d2 >= 10) hasCarry = true;
-                            str1 += d1; str2 += d2;
-                        }
-                        num1 = parseInt(str1); num2 = parseInt(str2);
-                    } else {
-                        num1 = parseInt(generateNumberStr(digits));
-                        num2 = parseInt(generateNumberStr(digits));
-                    }
-
-                    if (isDec) {
-                        num1 = num1 / Math.pow(10, Math.floor(digits/2) || 1);
-                        num2 = num2 / Math.pow(10, Math.floor(digits/2) || 1);
-                        qParts = { left: num1, operator: '+', right: num2 };
-                        a = (num1 + num2).toFixed(Math.floor(digits/2) || 1);
-                    } else if (isInt) {
-                        num1 = getSignedNum(num1); num2 = getSignedNum(num2);
-                        qParts = { left: formatSigned(num1), operator: '+', right: formatSigned(num2) };
-                        a = (num1 + num2).toString();
-                    } else {
-                        qParts = { left: num1, operator: '+', right: num2 };
-                        a = (num1 + num2).toString();
-                    }
-                } 
-                else if (type === 'sub') {
-                    let num1, num2;
-                    if (isRegrouping === 'without') {
-                        let str1 = '', str2 = '';
-                        for(let i=0; i<digits; i++) {
-                            let d1 = randomInt(1, 9);
-                            let d2 = randomInt(0, d1);
-                            str1 += d1; str2 += d2;
-                        }
-                        num1 = parseInt(str1); num2 = parseInt(str2);
-                    } else {
-                        num1 = parseInt(generateNumberStr(digits));
-                        num2 = parseInt(generateNumberStr(digits));
-                        if(num2 > num1) { let t=num1; num1=num2; num2=t; }
-                    }
-
-                    if (isDec) {
-                        num1 = num1 / Math.pow(10, Math.floor(digits/2) || 1);
-                        num2 = num2 / Math.pow(10, Math.floor(digits/2) || 1);
-                        qParts = { left: num1, operator: '-', right: num2 };
-                        a = (num1 - num2).toFixed(Math.floor(digits/2) || 1);
-                    } else if (isInt) {
-                        num1 = getSignedNum(num1); num2 = getSignedNum(num2);
-                        qParts = { left: formatSigned(num1), operator: '-', right: formatSigned(num2) };
-                        a = (num1 - num2).toString();
-                    } else {
-                        qParts = { left: num1, operator: '-', right: num2 };
-                        a = (num1 - num2).toString();
-                    }
-                }
-                else if (type === 'mul') {
-                    let num1, num2;
-                    if (settings.tables === 'mixed') {
-                        num1 = parseInt(generateNumberStr(digits));
-                        num2 = parseInt(generateNumberStr(digits));
-                    } else {
-                        num1 = parseInt(generateNumberStr(digits));
-                        num2 = parseInt(settings.tables);
-                    }
-
-                    if (isDec) {
-                        num1 = num1 / 10;
-                        if(settings.tables === 'mixed') num2 = num2 / 10;
-                        qParts = { left: num1, operator: 'x', right: num2 };
-                        a = (num1 * num2).toFixed(settings.tables === 'mixed' ? 2 : 1);
-                    } else if (isInt) {
-                        num1 = getSignedNum(num1); num2 = getSignedNum(num2);
-                        qParts = { left: formatSigned(num1), operator: 'x', right: formatSigned(num2) };
-                        a = (num1 * num2).toString();
-                    } else {
-                        qParts = { left: num1, operator: 'x', right: num2 };
-                        a = (num1 * num2).toString();
-                    }
-                }
-                else if (type === 'div') {
-                    let ans = parseInt(generateNumberStr(digits));
-                    let divisor = settings.tables === 'mixed' ? randomInt(2, 12) : parseInt(settings.tables);
-                    let dividend = ans * divisor;
-
-                    if (isDec) {
-                        dividend = (dividend / 10).toFixed(1);
-                        divisor = divisor;
-                        qParts = { left: dividend, operator: '÷', right: divisor };
-                        a = (parseFloat(dividend) / divisor).toFixed(1);
-                    } else if (isInt) {
-                        ans = getSignedNum(ans); divisor = getSignedNum(divisor);
-                        dividend = ans * divisor;
-                        qParts = { left: formatSigned(dividend), operator: '÷', right: formatSigned(divisor) };
-                        a = ans.toString();
-                    } else {
-                        qParts = { left: dividend, operator: '÷', right: divisor };
-                        a = ans.toString();
-                    }
-                }
-            } 
-            else if (catId.startsWith('frac_')) {
-                let type = catId.split('_')[1];
-                if (type === 'mixed') {
-                    const ops = ['add', 'sub', 'mul', 'div'];
-                    type = ops[Math.floor(Math.random() * ops.length)];
-                }
-
-                if (type === 'simplify') {
-                    let d = randomInt(2, 10);
-                    let n = randomInt(1, d - 1);
-                    let multiplier = randomInt(2, 6);
-                    q = `${n * multiplier} / ${d * multiplier}`;
-                    a = `${n}/${d}`;
-                } else {
-                    let n1 = randomInt(1, 5), d1 = randomInt(n1 + 1, 9);
-                    let n2 = randomInt(1, 5), d2 = randomInt(n2 + 1, 9);
-                    
-                    if (type === 'add') {
-                        q = `${n1}/${d1} + ${n2}/${d2}`;
-                        let resN = n1 * d2 + n2 * d1;
-                        let resD = d1 * d2;
-                        a = `${resN}/${resD}`; // Keep unsimplified for practice app basic logic
-                    } else if (type === 'sub') {
-                        if (n1/d1 < n2/d2) { let t = n1; n1 = n2; n2 = t; t = d1; d1 = d2; d2 = t; }
-                        q = `${n1}/${d1} - ${n2}/${d2}`;
-                        let resN = n1 * d2 - n2 * d1;
-                        let resD = d1 * d2;
-                        a = `${resN}/${resD}`;
-                    } else if (type === 'mul') {
-                        q = `${n1}/${d1} x ${n2}/${d2}`;
-                        a = `${n1*n2}/${d1*d2}`;
-                    } else if (type === 'div') {
-                        q = `${n1}/${d1} ÷ ${n2}/${d2}`;
-                        a = `${n1*d2}/${d1*n2}`;
-                    }
-                }
+        const checkRegrouping = (a, b, op, digits, wantRegrouping) => {
+            const strA = a.toString().padStart(digits, '0');
+            const strB = b.toString().padStart(digits, '0');
+            let hasRegrouping = false;
+            
+            for (let i = 0; i < digits; i++) {
+                let da = parseInt(strA[i]);
+                let db = parseInt(strB[i]);
+                if (op === '+') { if (da + db >= 10) hasRegrouping = true; }
+                if (op === '-') { if (da < db) hasRegrouping = true; }
             }
-            else if (catId.startsWith('perc_')) {
-                let base = randomInt(1, 20) * 10;
-                let rate = randomInt(1, 19) * 5;
-                let value = (rate / 100) * base;
+            return wantRegrouping === 'mixed' ? true : wantRegrouping === 'with' ? hasRegrouping : !hasRegrouping;
+        };
 
-                if (catId === 'perc_base') {
-                    qParts = { left: value, operator: 'is ' + rate + '% of', right: '?' };
-                    a = base.toString();
-                } else if (catId === 'perc_rate') {
-                    qParts = { left: value, operator: 'is what % of', right: base };
-                    a = rate.toString();
-                } else {
-                    qParts = { left: 'What is ' + rate + '% of', operator: '', right: base };
-                    a = value.toString();
-                }
-            }
-            else if (catId === 'exponents') {
-                let base = randomInt(2, 9);
-                let exp = randomInt(2, 4);
-                if (base > 5) exp = 2; // keep numbers reasonable
-                q = `${base}^${exp}`;
-                a = Math.pow(base, exp).toString();
-            }
-            else if (catId === 'laws_exp') {
-                let base = 'x';
-                let exp1 = randomInt(2, 7);
-                let exp2 = randomInt(2, 5);
-                let ops = ['mul', 'div', 'pow'];
-                let op = ops[Math.floor(Math.random() * ops.length)];
+        const generateProblems = (category, settings, count) => {
+            let problems = [];
+            
+            for (let i = 0; i < count; i++) {
+                let q = "", ans = "", format = "number", qObj = null;
+                let opList = settings.operation === 'mixed' ? ['+', '-', 'x', '÷'] : [settings.operation];
+                let op = opList[Math.floor(Math.random() * opList.length)];
                 
-                if (op === 'mul') {
-                    q = `${base}^${exp1} * ${base}^${exp2}`;
-                    a = `${base}^${exp1 + exp2}`;
-                } else if (op === 'div') {
-                    if (exp1 < exp2) { let t = exp1; exp1 = exp2; exp2 = t; }
-                    q = `${base}^${exp1} / ${base}^${exp2}`;
-                    a = `${base}^${exp1 - exp2}`;
-                } else {
-                    q = `(${base}^${exp1})^${exp2}`;
-                    a = `${base}^${exp1 * exp2}`;
+                if (category === "Whole Numbers" || category === "Integers" || category === "Decimals") {
+                    let d = parseInt(settings.digits) || 2;
+                    let isInt = category === "Integers";
+                    let isDec = category === "Decimals";
+                    let sign = settings.integerType; // positive, negative, mixed
+                    
+                    let a = generateNumber(d);
+                    let b = generateNumber(d);
+                    
+                    if (isInt) {
+                        if (sign === 'negative') { a = -a; b = -b; }
+                        else if (sign === 'mixed') { a *= (Math.random() > 0.5 ? 1 : -1); b *= (Math.random() > 0.5 ? 1 : -1); }
+                    }
+
+                    // Handle regrouping logic for + and -
+                    if ((op === '+' || op === '-') && settings.regrouping !== 'mixed' && !isDec) {
+                        let attempts = 0;
+                        while (!checkRegrouping(Math.abs(a), Math.abs(b), op, d, settings.regrouping) && attempts < 50) {
+                            a = generateNumber(d); b = generateNumber(d);
+                            if (isInt && sign === 'negative') { a = -a; b = -b; }
+                            attempts++;
+                        }
+                        if (op === '-' && a < b && !isInt) { let temp = a; a = b; b = temp; }
+                    } else if (op === '-' && !isInt && a < b) {
+                        let temp = a; a = b; b = temp;
+                    }
+
+                    if (op === 'x' || op === '÷') {
+                        let tbl = parseInt(settings.table);
+                        if (tbl) b = isInt && sign==='negative' ? -tbl : tbl;
+                        if (op === '÷') {
+                            a = a * b; // ensure clean division
+                            if (a === 0) a = b; // prevent 0/x if unwanted
+                        }
+                    }
+
+                    let dispA = a; let dispB = b;
+                    if (isDec) {
+                        dispA = (a / Math.pow(10, Math.ceil(d/2))).toFixed(Math.ceil(d/2));
+                        dispB = (b / Math.pow(10, Math.ceil(d/2))).toFixed(Math.ceil(d/2));
+                    }
+
+                    q = `${dispA} ${op} ${dispB}`;
+                    
+                    if ((category === "Whole Numbers" || category === "Decimals" || category === "Integers") && (op === '+' || op === '-' || op === 'x')) {
+                        format = "vertical";
+                        qObj = { num1: dispA, num2: dispB, op: op };
+                    }
+
+                    if (op === '+') ans = parseFloat(dispA) + parseFloat(dispB);
+                    if (op === '-') ans = parseFloat(dispA) - parseFloat(dispB);
+                    if (op === 'x') ans = parseFloat(dispA) * parseFloat(dispB);
+                    if (op === '÷') ans = parseFloat(dispA) / parseFloat(dispB);
+
+                    if (isDec) ans = parseFloat(ans.toFixed(4)).toString();
+                    else ans = ans.toString();
+
+                } else if (category === "Fractions") {
+                    format = "fraction";
+                    if (op === "simplifying") {
+                        let den = rInt(2, 20);
+                        let factor = rInt(2, 5);
+                        let num = rInt(1, den - 1);
+                        q = `Simplify: ${(num*factor)}/${(den*factor)}`;
+                        let div = gcf(num, den);
+                        ans = `${num/div}/${den/div}`;
+                    } else {
+                        let d1 = rInt(2, 10);
+                        let d2 = settings.regrouping === 'dissimilar' ? rInt(2, 10) : d1;
+                        let n1 = rInt(1, d1 * 2); // allow improper
+                        let n2 = rInt(1, d2 * 2);
+                        
+                        if (d1===d2 && n1===n2) n2 = rInt(1, d2-1);
+                        
+                        q = `${n1}/${d1} ${op} ${n2}/${d2}`;
+                        let numRes, denRes;
+
+                        if (op === '+') { numRes = n1*d2 + n2*d1; denRes = d1*d2; }
+                        if (op === '-') { numRes = n1*d2 - n2*d1; denRes = d1*d2; }
+                        if (op === 'x') { numRes = n1*n2; denRes = d1*d2; }
+                        if (op === '÷') { numRes = n1*d2; denRes = d1*n2; }
+
+                        let div = gcf(Math.abs(numRes), Math.abs(denRes));
+                        ans = `${numRes/div}/${denRes/div}`;
+                        // Handle integer answers if denominator becomes 1
+                        if (denRes/div === 1) { ans = `${numRes/div}`; format = "number"; }
+                        if (denRes/div === -1) { ans = `${-numRes/div}`; format = "number"; }
+                    }
+                } else if (category === "Percentages") {
+                    let type = opList[Math.floor(Math.random() * opList.length)];
+                    let base = rInt(2, 20) * 10; 
+                    let rate = rInt(1, 19) * 5; 
+                    let perc = (base * rate) / 100;
+
+                    if (type === 'find_percentage' || op === '+') {
+                        q = `What is ${rate}% of ${base}?`;
+                        ans = perc.toString();
+                    } else if (type === 'find_rate' || op === '-') {
+                        q = `${perc} is what percent of ${base}?`;
+                        ans = rate.toString();
+                    } else {
+                        q = `${perc} is ${rate}% of what number?`;
+                        ans = base.toString();
+                    }
+                } else if (category === "Exponents") {
+                    let type = opList[Math.floor(Math.random() * opList.length)];
+                    if (type === 'evaluate' || op === '+') {
+                        let base = rInt(2, 9);
+                        let exp = rInt(2, 4);
+                        q = `Evaluate: ${base}^${exp}`;
+                        ans = Math.pow(base, exp).toString();
+                    } else { // Laws
+                        let base = ['x', 'y', 'a', 'b'][rInt(0,3)];
+                        let e1 = rInt(2, 8);
+                        let e2 = rInt(2, 8);
+                        let law = ['*', '/', '()'][rInt(0,2)];
+                        if (law === '*') { q = `Simplify: ${base}^${e1} * ${base}^${e2}`; ans = `${base}^${e1+e2}`; format="text"; }
+                        if (law === '/') { 
+                            if (e1 < e2) { let t=e1; e1=e2; e2=t; }
+                            q = `Simplify: ${base}^${e1} / ${base}^${e2}`; ans = `${base}^${e1-e2}`; format="text";
+                        }
+                        if (law === '()') { q = `Simplify: (${base}^${e1})^${e2}`; ans = `${base}^${e1*e2}`; format="text"; }
+                    }
                 }
+                
+                problems.push({ question: q, qObj: qObj, answer: ans, format: format });
             }
-
-            if(qParts.left !== '') {
-                q = `${qParts.left} ${qParts.operator} ${qParts.right}`.trim();
-            }
-
-            return { q, a };
+            return problems;
         };
 
         const App = () => {
-            const [screen, setScreen] = useState('home'); // home, guides, settings, quiz, results, admin_login, admin_dashboard
-            
-            // App State
-            const [studentName, setStudentName] = useState('');
-            const [selectedCategory, setSelectedCategory] = useState(null);
-            
-            // Settings State
-            const [settings, setSettings] = useState({
-                digits: '2',
-                regrouping: 'mixed', // with, without, mixed
-                signs: 'mixed', // pos, neg, mixed
-                tables: 'mixed', // 1-12 or mixed
-                totalQuestions: 10
-            });
-
-            // Quiz State
+            const [screen, setScreen] = useState('home');
+            const [userName, setUserName] = useState('');
+            const [category, setCategory] = useState('');
+            const [settings, setSettings] = useState({});
             const [questions, setQuestions] = useState([]);
-            const [currentIndex, setCurrentIndex] = useState(0);
-            const [score, setScore] = useState(0);
-            const [tries, setTries] = useState(0);
-            const [showAnswer, setShowAnswer] = useState(false);
-            const [errorMsg, setErrorMsg] = useState('');
+            const [currentQIndex, setCurrentQIndex] = useState(0);
             
-            // Input States
-            const [stdInput, setStdInput] = useState('');
-            const [fracInput, setFracInput] = useState({ num: '', den: '' });
+            // Input states
+            const [answerInput, setAnswerInput] = useState('');
+            const [numInput, setNumInput] = useState('');
+            const [denInput, setDenInput] = useState('');
 
-            // Admin / Guides
+            const [score, setScore] = useState(0);
+            const [tries, setTries] = useState(2);
+            const [feedback, setFeedback] = useState('');
+            const [showCorrect, setShowCorrect] = useState(false);
+            
+            const [adminData, setAdminData] = useState([]);
             const [adminPass, setAdminPass] = useState('');
-            const [scoresList, setScoresList] = useState([]);
-            const [selectedGuideId, setSelectedGuideId] = useState('whole_add');
+            const [guideLang, setGuideLang] = useState('eng');
+            const [activeGuide, setActiveGuide] = useState('Whole Numbers');
 
-            // Save to external DB logic
-            const syncScore = async (finalScore, maxScore) => {
-                const data = {
-                    name: studentName,
-                    topic: selectedCategory.label + ' (' + selectedCategory.group + ')',
-                    score: finalScore,
-                    total: maxScore,
-                    timestamp: new Date().toISOString()
-                };
-
-                // Firebase
-                if (window.saveScoreToFirebase) {
-                    await window.saveScoreToFirebase(data);
-                }
-
-                // Google Apps Script Fallback
-                if (typeof google !== 'undefined' && google.script && google.script.run) {
-                    google.script.run.saveScoreToSheet(data);
-                }
+            // --- NAVIGATION ---
+            const startSetup = (cat) => {
+                if (!userName.trim()) { alert("Please enter your name first."); return; }
+                setCategory(cat);
+                setSettings({
+                    operation: '+',
+                    digits: '1',
+                    regrouping: 'mixed',
+                    integerType: 'mixed',
+                    table: 'none',
+                    questionCount: 5
+                });
+                setScreen('setup');
             };
 
-            const handleStartQuiz = () => {
-                if (!studentName.trim()) {
-                    setErrorMsg('Please enter your name first!');
-                    return;
-                }
-                setErrorMsg('');
-                
-                let generated = [];
-                for(let i=0; i<settings.totalQuestions; i++) {
-                    generated.push(generateProblemStr(selectedCategory.id, settings));
-                }
-                setQuestions(generated);
-                setCurrentIndex(0);
+            const startQuiz = () => {
+                const probs = generateProblems(category, settings, settings.questionCount);
+                setQuestions(probs);
+                setCurrentQIndex(0);
                 setScore(0);
-                setTries(0);
-                setShowAnswer(false);
-                setStdInput('');
-                setFracInput({num: '', den: ''});
+                setTries(2);
+                resetInputs();
+                setFeedback('');
+                setShowCorrect(false);
                 setScreen('quiz');
             };
 
-            const handleSubmitAnswer = () => {
-                let userAnswer = '';
-                const currentQ = questions[currentIndex];
-                const isFrac = selectedCategory.id.startsWith('frac_') && selectedCategory.id !== 'frac_simplify' && !currentQ.a.includes('^');
-                
-                if (isFrac) {
-                    userAnswer = `${fracInput.num}/${fracInput.den}`;
+            const resetInputs = () => {
+                setAnswerInput('');
+                setNumInput('');
+                setDenInput('');
+            };
+
+            // --- QUIZ LOGIC ---
+            const checkAnswer = () => {
+                const currentQ = questions[currentQIndex];
+                let userAns = "";
+
+                if (currentQ.format === 'fraction') {
+                    if (!numInput || !denInput) { setFeedback("Please fill both numerator and denominator."); return; }
+                    userAns = `${numInput.trim()}/${denInput.trim()}`;
                 } else {
-                    userAnswer = stdInput.trim().toLowerCase(); // lowercase for 'x^4' type answers
+                    if (!answerInput) { setFeedback("Please enter an answer."); return; }
+                    userAns = answerInput.trim().toLowerCase();
                 }
 
-                if (userAnswer === currentQ.a.toLowerCase()) {
-                    if (tries === 0) setScore(score + 1);
-                    nextQuestion();
+                if (userAns === currentQ.answer.toLowerCase()) {
+                    setScore(s => s + 1);
+                    setFeedback("Correct! 🎉");
+                    setShowCorrect(true);
                 } else {
-                    if (tries === 0) {
-                        setTries(1);
-                        setErrorMsg('Incorrect. Try again!');
+                    if (tries > 1) {
+                        setTries(t => t - 1);
+                        setFeedback(`Incorrect. You have 1 try left.`);
                     } else {
-                        setShowAnswer(true);
-                        setErrorMsg('Incorrect. Showing correct answer.');
+                        setFeedback(`Incorrect. The correct answer is:`);
+                        setShowCorrect(true);
                     }
                 }
             };
 
             const nextQuestion = () => {
-                if (currentIndex + 1 >= settings.totalQuestions) {
-                    let finalScore = tries === 0 && !showAnswer && !errorMsg.includes('Incorrect') ? score + 1 : score;
-                    // Note: Quick sync fix - rely on correct state closure or param pass
-                    const calculatedFinalScore = score + (stdInput.trim().toLowerCase() === questions[currentIndex].a.toLowerCase() && tries === 0 ? 1 : 0);
-                    syncScore(calculatedFinalScore, settings.totalQuestions);
-                    setScreen('results');
+                if (currentQIndex < questions.length - 1) {
+                    setCurrentQIndex(c => c + 1);
+                    setTries(2);
+                    resetInputs();
+                    setFeedback('');
+                    setShowCorrect(false);
                 } else {
-                    setCurrentIndex(currentIndex + 1);
-                    setTries(0);
-                    setShowAnswer(false);
-                    setErrorMsg('');
-                    setStdInput('');
-                    setFracInput({num: '', den: ''});
+                    finishQuiz();
                 }
             };
 
-            const fetchAdminScores = async () => {
-                if (window.getScoresFromFirebase) {
-                    const data = await window.getScoresFromFirebase();
-                    setScoresList(data.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+            const finishQuiz = async () => {
+                setScreen('results');
+                // Save to Firebase
+                try {
+                    if (window.firebaseCollection && window.firebaseDb) {
+                        await window.firebaseAddDoc(window.firebaseCollection(window.firebaseDb, "scores"), {
+                            name: userName,
+                            category: category,
+                            score: score,
+                            total: questions.length,
+                            date: new Date().toISOString()
+                        });
+                    }
+                } catch (e) {
+                    console.error("Firebase save error:", e);
+                }
+
+                // Fallback / Google Apps Script webhook
+                try {
+                    if (typeof google !== 'undefined' && google.script) {
+                        google.script.run.saveScoreToSheet({
+                            timestamp: new Date().toISOString(),
+                            name: userName,
+                            topic: category,
+                            score: score,
+                            total: questions.length
+                        });
+                    }
+                } catch (e) { console.log("GAS not found, continuing."); }
+            };
+
+            // --- ADMIN LOGIC ---
+            const loginAdmin = async () => {
+                if (adminPass === "Admin1") {
+                    setScreen('admin_load');
+                    try {
+                        const q = window.firebaseQuery(window.firebaseCollection(window.firebaseDb, "scores"), window.firebaseOrderBy("date", "desc"));
+                        const querySnapshot = await window.firebaseGetDocs(q);
+                        const docs = [];
+                        querySnapshot.forEach((doc) => docs.push(doc.data()));
+                        setAdminData(docs);
+                        setScreen('admin');
+                    } catch (e) {
+                        console.error("Admin fetch error", e);
+                        setScreen('home');
+                    }
+                } else {
+                    alert("Incorrect Password");
                 }
             };
 
+            // --- RENDERERS ---
             if (screen === 'home') {
-                const groupedCats = CATEGORIES.reduce((acc, cat) => {
-                    if (!acc[cat.group]) acc[cat.group] = [];
-                    acc[cat.group].push(cat);
-                    return acc;
-                }, {});
-
                 return (
                     <div className="min-h-screen flex flex-col items-center py-10 px-4">
-                        <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden relative">
-                            <button onClick={() => setScreen('admin_login')} className="absolute top-4 right-4 text-xs font-semibold text-gray-400 hover:text-gray-800 transition">Admin Panel</button>
-                            
-                            <div className="bg-blue-600 p-8 text-center text-white">
-                                <h1 className="text-3xl md:text-4xl font-bold mb-2">Math Practice Pro</h1>
-                                <p className="text-blue-100 mb-4">Master your math skills step by step.</p>
-                                <button 
-                                    onClick={() => setScreen('guides')}
-                                    className="bg-white text-blue-600 px-6 py-2 rounded-full font-bold shadow hover:bg-blue-50 transition"
-                                >
-                                    📖 View Study Guides
+                        <div className="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden">
+                            <div className="bg-blue-600 p-8 text-center text-white relative">
+                                <h1 className="text-4xl font-bold mb-2"><i className="fas fa-square-root-variable mr-3"></i>Math Practice Pro</h1>
+                                <p className="opacity-90 text-lg">Master your mathematical skills!</p>
+                                <button onClick={() => setScreen('admin_login')} className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 p-2 rounded-lg text-sm font-medium transition">
+                                    <i className="fas fa-lock mr-2"></i>Admin
                                 </button>
                             </div>
-
+                            
                             <div className="p-8">
-                                <div className="mb-6 max-w-md mx-auto">
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">Student Name:</label>
+                                <div className="mb-8 flex flex-col items-center">
+                                    <label className="text-gray-700 font-semibold mb-2 text-lg">Enter Your Name:</label>
                                     <input 
                                         type="text" 
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                                        placeholder="Enter your full name to start..."
-                                        value={studentName}
-                                        onChange={e => setStudentName(e.target.value)}
+                                        value={userName} 
+                                        onChange={e => setUserName(e.target.value)}
+                                        className="border-2 border-gray-300 rounded-xl px-4 py-3 w-full max-w-md text-center text-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
+                                        placeholder="e.g., Juan Dela Cruz"
                                     />
-                                    {errorMsg && <p className="text-red-500 text-sm mt-1">{errorMsg}</p>}
                                 </div>
 
-                                <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Select a Topic to Practice</h2>
-                                
-                                {Object.entries(groupedCats).map(([group, cats]) => (
-                                    <div key={group} className="mb-8">
-                                        <h3 className="text-lg font-bold text-gray-500 border-b pb-2 mb-4">{group}</h3>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                            {cats.map(cat => (
-                                                <button 
-                                                    key={cat.id}
-                                                    onClick={() => { setSelectedCategory(cat); setScreen('settings'); setErrorMsg(''); }}
-                                                    className="bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl p-4 text-center transition flex flex-col items-center justify-center"
-                                                >
-                                                    <span className="font-semibold text-gray-700">{cat.label}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
+                                <div className="flex justify-center mb-6">
+                                    <button onClick={() => setScreen('guides')} className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-bold shadow-md transition flex items-center gap-2">
+                                        <i className="fas fa-book-open"></i> Study Guides & Procedures
+                                    </button>
+                                </div>
+
+                                <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center border-b pb-2">Select a Topic</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {["Whole Numbers", "Decimals", "Fractions", "Integers", "Percentages", "Exponents"].map(cat => (
+                                        <button 
+                                            key={cat}
+                                            onClick={() => startSetup(cat)}
+                                            className="bg-gray-50 hover:bg-blue-50 border-2 border-gray-200 hover:border-blue-500 text-gray-800 rounded-xl p-5 text-left transition transform hover:-translate-y-1 hover:shadow-lg flex items-center justify-between group"
+                                        >
+                                            <span className="text-xl font-semibold">{cat}</span>
+                                            <i className="fas fa-chevron-right text-gray-400 group-hover:text-blue-500"></i>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
                 );
             }
 
-            if (screen === 'settings') {
-                const needsDigits = selectedCategory.id.startsWith('whole_') || selectedCategory.id.startsWith('dec_') || selectedCategory.id.startsWith('int_');
-                const needsRegrouping = selectedCategory.id.includes('_add') || selectedCategory.id.includes('_sub');
-                const needsSigns = selectedCategory.id.startsWith('int_');
-                const needsTables = selectedCategory.id.includes('_mul') || selectedCategory.id.includes('_div');
-
+            if (screen === 'setup') {
                 return (
                     <div className="min-h-screen flex items-center justify-center p-4">
-                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Practice Settings</h2>
-                            <p className="text-gray-500 mb-6 border-b pb-4">{selectedCategory.group}: {selectedCategory.label}</p>
+                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+                            <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
+                                <h2 className="text-2xl font-bold">{category} Setup</h2>
+                                <button onClick={() => setScreen('home')} className="hover:bg-blue-700 p-2 rounded"><i className="fas fa-times"></i></button>
+                            </div>
+                            
+                            <div className="p-6 space-y-5">
+                                {/* Operations */}
+                                <div>
+                                    <label className="block text-gray-700 font-semibold mb-2">Operation</label>
+                                    <select 
+                                        className="w-full border-2 rounded-lg p-3 outline-none focus:border-blue-500"
+                                        value={settings.operation}
+                                        onChange={e => setSettings({...settings, operation: e.target.value})}
+                                    >
+                                        <option value="mixed">Mixed Operations</option>
+                                        <option value="+">Addition</option>
+                                        <option value="-">Subtraction</option>
+                                        <option value="x">Multiplication</option>
+                                        <option value="÷">Division</option>
+                                        {category === 'Fractions' && <option value="simplifying">Simplifying</option>}
+                                    </select>
+                                </div>
 
-                            <div className="space-y-5">
-                                {needsDigits && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Number of Digits</label>
-                                        <select value={settings.digits} onChange={e => setSettings({...settings, digits: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
-                                            <option value="1">1 Digit</option>
-                                            <option value="2">2 Digits</option>
-                                            <option value="3">3 Digits</option>
-                                            <option value="4">4 Digits</option>
-                                        </select>
-                                    </div>
+                                {/* Number settings */}
+                                {(category === "Whole Numbers" || category === "Decimals" || category === "Integers") && (
+                                    <>
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-2">Number of Digits</label>
+                                            <select className="w-full border-2 rounded-lg p-3 outline-none" value={settings.digits} onChange={e => setSettings({...settings, digits: e.target.value})}>
+                                                <option value="1">1 Digit</option><option value="2">2 Digits</option><option value="3">3 Digits</option><option value="4">4 Digits</option>
+                                            </select>
+                                        </div>
+                                        {(settings.operation === '+' || settings.operation === '-') && category !== "Decimals" && (
+                                            <div>
+                                                <label className="block text-gray-700 font-semibold mb-2">Regrouping (Borrow/Carry)</label>
+                                                <select className="w-full border-2 rounded-lg p-3 outline-none" value={settings.regrouping} onChange={e => setSettings({...settings, regrouping: e.target.value})}>
+                                                    <option value="mixed">Mixed (Random)</option><option value="with">Always Regroup</option><option value="without">Without Regrouping</option>
+                                                </select>
+                                            </div>
+                                        )}
+                                        {(settings.operation === 'x' || settings.operation === '÷') && (
+                                            <div>
+                                                <label className="block text-gray-700 font-semibold mb-2">Times Tables (Optional)</label>
+                                                <select className="w-full border-2 rounded-lg p-3 outline-none" value={settings.table} onChange={e => setSettings({...settings, table: e.target.value})}>
+                                                    <option value="none">Random</option>
+                                                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>Table of {n}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
 
-                                {needsRegrouping && !selectedCategory.id.startsWith('frac_') && (
+                                {category === "Integers" && (
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Regrouping (Carry/Borrow)</label>
-                                        <select value={settings.regrouping} onChange={e => setSettings({...settings, regrouping: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
-                                            <option value="mixed">Mixed (Random)</option>
-                                            <option value="without">Without Regrouping</option>
-                                            <option value="with">With Regrouping</option>
-                                        </select>
-                                    </div>
-                                )}
-
-                                {needsSigns && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Integer Signs</label>
-                                        <select value={settings.signs} onChange={e => setSettings({...settings, signs: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
-                                            <option value="mixed">Mixed (Positive & Negative)</option>
-                                            <option value="pos">Positive Only</option>
-                                            <option value="neg">Negative Only</option>
-                                        </select>
-                                    </div>
-                                )}
-
-                                {needsTables && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Times Tables (Multiplier/Divisor)</label>
-                                        <select value={settings.tables} onChange={e => setSettings({...settings, tables: e.target.value})} className="w-full p-2 border rounded-lg bg-gray-50">
-                                            <option value="mixed">Mixed (Random up to digits length)</option>
-                                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>Table of {n}</option>)}
+                                        <label className="block text-gray-700 font-semibold mb-2">Number Types</label>
+                                        <select className="w-full border-2 rounded-lg p-3 outline-none" value={settings.integerType} onChange={e => setSettings({...settings, integerType: e.target.value})}>
+                                            <option value="mixed">Both Positive & Negative</option><option value="positive">Only Positive</option><option value="negative">Only Negative</option>
                                         </select>
                                     </div>
                                 )}
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Number of Questions</label>
-                                    <select value={settings.totalQuestions} onChange={e => setSettings({...settings, totalQuestions: parseInt(e.target.value)})} className="w-full p-2 border rounded-lg bg-gray-50">
-                                        <option value={5}>5 Questions</option>
-                                        <option value={10}>10 Questions</option>
-                                        <option value={20}>20 Questions</option>
-                                    </select>
+                                    <label className="block text-gray-700 font-semibold mb-2">Number of Questions</label>
+                                    <input type="number" min="1" max="50" className="w-full border-2 rounded-lg p-3 outline-none" value={settings.questionCount} onChange={e => setSettings({...settings, questionCount: parseInt(e.target.value) || 5})} />
                                 </div>
-                            </div>
 
-                            <div className="mt-8 flex gap-3">
-                                <button onClick={() => setScreen('home')} className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">Back</button>
-                                <button onClick={handleStartQuiz} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Start Quiz</button>
+                                <button onClick={startQuiz} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-xl shadow-lg mt-4 transition text-lg">
+                                    Start Practice!
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1004,52 +727,84 @@
             }
 
             if (screen === 'quiz') {
-                const currentQ = questions[currentIndex];
-                const isFrac = selectedCategory.id.startsWith('frac_') && selectedCategory.id !== 'frac_simplify' && !currentQ.a.includes('^');
-
+                const currentQ = questions[currentQIndex];
                 return (
-                    <div className="min-h-screen flex items-center justify-center p-4">
-                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg relative">
-                            <button onClick={() => setScreen('home')} className="absolute top-4 right-4 text-sm text-red-500 hover:text-red-700 font-semibold">Cancel Progress</button>
-                            
-                            <div className="flex justify-between text-sm font-bold text-gray-500 mb-6">
-                                <span>{studentName}</span>
-                                <span>Question {currentIndex + 1} of {settings.totalQuestions}</span>
+                    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-100">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
+                            {/* Header */}
+                            <div className="bg-blue-600 p-5 flex justify-between items-center text-white">
+                                <div className="font-semibold">{userName}</div>
+                                <div className="font-bold text-xl">Question {currentQIndex + 1} / {questions.length}</div>
+                                <button onClick={() => setScreen('home')} className="text-red-200 hover:text-white"><i className="fas fa-times-circle text-xl"></i></button>
                             </div>
 
-                            <div className="text-center mb-8">
-                                <div className="text-4xl md:text-5xl font-mono font-bold text-gray-800 tracking-wider mb-6 bg-gray-50 py-8 rounded-xl border border-gray-100 shadow-inner">
-                                    {currentQ.q} = ?
-                                </div>
-
-                                {!showAnswer ? (
-                                    <div className="max-w-xs mx-auto">
-                                        {isFrac ? (
-                                            <div className="flex flex-col items-center gap-2">
-                                                <input type="number" value={fracInput.num} onChange={e => setFracInput({...fracInput, num: e.target.value})} className="w-24 text-center p-2 text-xl border-2 border-gray-300 rounded focus:border-blue-500 outline-none" placeholder="Num" />
-                                                <div className="w-24 h-1 bg-gray-800 rounded"></div>
-                                                <input type="number" value={fracInput.den} onChange={e => setFracInput({...fracInput, den: e.target.value})} className="w-24 text-center p-2 text-xl border-2 border-gray-300 rounded focus:border-blue-500 outline-none" placeholder="Den" />
+                            {/* Question Area */}
+                            <div className="p-10 flex-grow flex flex-col items-center justify-center min-h-[300px]">
+                                {currentQ.format === 'vertical' ? (
+                                    <div className="flex justify-center mb-10">
+                                        <div className="flex flex-col items-end text-5xl md:text-6xl font-mono font-bold text-gray-800 tracking-widest">
+                                            <div className="pr-2">{currentQ.qObj.num1}</div>
+                                            <div className="flex justify-between w-full min-w-[5em] border-b-4 border-gray-800 pb-2 mt-2">
+                                                <span className="text-blue-600 mr-6">{currentQ.qObj.op}</span>
+                                                <span className="pr-2">{currentQ.qObj.num2}</span>
                                             </div>
-                                        ) : (
-                                            <input 
-                                                type="text" 
-                                                value={stdInput} 
-                                                onChange={e => setStdInput(e.target.value)} 
-                                                onKeyDown={e => e.key === 'Enter' && handleSubmitAnswer()}
-                                                className="w-full text-center p-3 text-2xl border-2 border-gray-300 rounded-lg focus:border-blue-500 outline-none" 
-                                                placeholder="Your Answer" 
-                                                autoFocus
-                                            />
-                                        )}
-                                        {errorMsg && <p className="text-red-500 font-semibold mt-3 animate-pulse">{errorMsg}</p>}
-                                        <button onClick={handleSubmitAnswer} className="mt-6 w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Submit Answer</button>
+                                        </div>
                                     </div>
                                 ) : (
-                                    <div className="max-w-xs mx-auto animate-fade-in">
-                                        <p className="text-red-500 font-bold mb-2">The correct answer is:</p>
-                                        <div className="text-3xl font-mono font-bold text-green-600 bg-green-50 py-4 rounded-lg border border-green-200 mb-6">{currentQ.a}</div>
-                                        <button onClick={nextQuestion} className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Next Question</button>
-                                    </div>
+                                    <h2 className="text-4xl md:text-5xl font-bold text-gray-800 mb-10 text-center tracking-wide">
+                                        <MathText text={currentQ.question} />
+                                    </h2>
+                                )}
+
+                                {/* Dynamic Input Field */}
+                                <div className="w-full max-w-sm">
+                                    {currentQ.format === 'fraction' ? (
+                                        <div className="flex flex-col items-center gap-2 bg-gray-50 p-6 rounded-xl border-2 border-gray-200">
+                                            <input 
+                                                type="number" 
+                                                className="w-24 text-center text-3xl font-bold bg-transparent outline-none p-2 border-2 border-gray-300 focus:border-blue-500 rounded-lg"
+                                                value={numInput} onChange={e => setNumInput(e.target.value)} disabled={showCorrect} placeholder="Num"
+                                            />
+                                            <div className="h-1 bg-gray-800 w-32 rounded-full my-1"></div>
+                                            <input 
+                                                type="number" 
+                                                className="w-24 text-center text-3xl font-bold bg-transparent outline-none p-2 border-2 border-gray-300 focus:border-blue-500 rounded-lg"
+                                                value={denInput} onChange={e => setDenInput(e.target.value)} disabled={showCorrect} placeholder="Den"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <input 
+                                            type="text" 
+                                            className="w-full border-4 border-gray-200 rounded-xl px-6 py-4 text-center text-3xl font-bold focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition"
+                                            value={answerInput} onChange={e => setAnswerInput(e.target.value)} disabled={showCorrect} placeholder="Your Answer"
+                                            onKeyDown={e => e.key === 'Enter' && !showCorrect && checkAnswer()}
+                                        />
+                                    )}
+                                </div>
+
+                                {/* Feedback */}
+                                <div className="h-16 mt-6 flex items-center justify-center w-full">
+                                    {feedback && (
+                                        <div className={`text-xl font-bold px-6 py-3 rounded-xl ${feedback.includes('Correct') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            {feedback}
+                                            {showCorrect && !feedback.includes('Correct') && (
+                                                <span className="ml-2 font-black text-black text-2xl"><MathText text={currentQ.answer} /></span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Controls */}
+                            <div className="bg-gray-50 p-6 border-t flex justify-center">
+                                {!showCorrect ? (
+                                    <button onClick={checkAnswer} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl font-bold text-xl shadow-md transition w-full max-w-sm">
+                                        Submit Answer
+                                    </button>
+                                ) : (
+                                    <button onClick={nextQuestion} className="bg-green-500 hover:bg-green-600 text-white px-10 py-4 rounded-xl font-bold text-xl shadow-md transition w-full max-w-sm flex items-center justify-center gap-2">
+                                        {currentQIndex < questions.length - 1 ? 'Next Question' : 'View Results'} <i className="fas fa-arrow-right"></i>
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -1058,24 +813,113 @@
             }
 
             if (screen === 'results') {
-                const percentage = (score / settings.totalQuestions) * 100;
-                let message = "Keep practicing!";
-                if (percentage >= 90) message = "Excellent work!";
-                else if (percentage >= 70) message = "Great job!";
+                const percentage = Math.round((score / questions.length) * 100);
+                let msg = "Great Job!";
+                if (percentage === 100) msg = "Perfect Score! 🏆";
+                else if (percentage < 50) msg = "Keep Practicing! 💪";
 
                 return (
                     <div className="min-h-screen flex items-center justify-center p-4">
-                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-                            <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">🏆</div>
-                            <h2 className="text-3xl font-bold text-gray-800 mb-2">{message}</h2>
-                            <p className="text-gray-500 mb-6 font-medium">{studentName}</p>
+                        <div className="bg-white rounded-2xl shadow-xl p-10 max-w-md w-full text-center">
+                            <h2 className="text-4xl font-bold text-blue-600 mb-2">{msg}</h2>
+                            <p className="text-xl text-gray-600 mb-8">{userName}, here are your results for {category}.</p>
                             
-                            <div className="bg-gray-50 rounded-xl p-6 mb-6">
-                                <p className="text-sm text-gray-500 uppercase tracking-wider font-bold mb-1">Final Score</p>
-                                <p className="text-5xl font-extrabold text-blue-600">{score} <span className="text-2xl text-gray-400">/ {settings.totalQuestions}</span></p>
+                            <div className="bg-gray-50 border-4 border-gray-100 rounded-full w-48 h-48 mx-auto flex flex-col items-center justify-center mb-8 shadow-inner">
+                                <span className="text-6xl font-black text-gray-800">{score}</span>
+                                <span className="text-xl text-gray-500 font-bold border-t-2 border-gray-300 w-24 mt-2 pt-2">out of {questions.length}</span>
                             </div>
 
-                            <button onClick={() => setScreen('home')} className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Return Home</button>
+                            <button onClick={() => setScreen('home')} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition text-lg">
+                                Back to Home
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (screen === 'guides') {
+                const guide = GUIDES_DATA[activeGuide][guideLang];
+                return (
+                    <div className="min-h-screen bg-gray-100 flex flex-col md:flex-row">
+                        {/* Sidebar */}
+                        <div className="w-full md:w-1/3 lg:w-1/4 bg-white shadow-lg z-10 flex flex-col">
+                            <div className="p-6 bg-blue-600 text-white flex justify-between items-center">
+                                <h2 className="text-2xl font-bold"><i className="fas fa-book mr-2"></i> Topics</h2>
+                                <button onClick={() => setScreen('home')} className="hover:bg-blue-700 p-2 rounded"><i className="fas fa-home"></i></button>
+                            </div>
+                            <div className="flex-grow overflow-y-auto">
+                                {Object.keys(GUIDES_DATA).map(topic => (
+                                    <button 
+                                        key={topic} 
+                                        onClick={() => setActiveGuide(topic)}
+                                        className={`w-full text-left p-4 border-b font-semibold transition ${activeGuide === topic ? 'bg-blue-50 text-blue-700 border-l-4 border-l-blue-600' : 'text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        {topic}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {/* Main Content */}
+                        <div className="w-full md:w-2/3 lg:w-3/4 p-6 md:p-10 overflow-y-auto max-h-screen">
+                            <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm p-8">
+                                <div className="flex justify-between items-end border-b pb-4 mb-6">
+                                    <h1 className="text-4xl font-bold text-gray-800">{activeGuide}</h1>
+                                    <div className="flex bg-gray-100 rounded-lg p-1">
+                                        <button onClick={() => setGuideLang('eng')} className={`px-4 py-2 text-sm font-bold rounded-md ${guideLang==='eng'?'bg-white shadow text-blue-600':'text-gray-500'}`}>English</button>
+                                        <button onClick={() => setGuideLang('fil')} className={`px-4 py-2 text-sm font-bold rounded-md ${guideLang==='fil'?'bg-white shadow text-blue-600':'text-gray-500'}`}>Filipino</button>
+                                    </div>
+                                </div>
+                                
+                                <p className="text-lg text-gray-700 mb-8 italic">{guide.desc}</p>
+                                
+                                <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2"><i className="fas fa-list-ol text-blue-500"></i> Steps / Rules</h3>
+                                <ul className="space-y-4 mb-10">
+                                    {guide.steps.map((step, idx) => (
+                                        <li key={idx} className="bg-blue-50 p-4 rounded-xl text-gray-800 leading-relaxed border-l-4 border-blue-400">
+                                            <MathText text={step} />
+                                        </li>
+                                    ))}
+                                </ul>
+
+                                <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2"><i className="fas fa-lightbulb text-amber-500"></i> Examples</h3>
+                                <div className="grid gap-4">
+                                    {guide.examples.map((ex, idx) => {
+                                        if (typeof ex === 'string') {
+                                            return (
+                                                <div key={idx} className="bg-gray-800 text-white p-6 rounded-xl font-mono text-lg shadow-inner">
+                                                    <MathText text={ex} />
+                                                </div>
+                                            );
+                                        }
+                                        if (ex.type === 'vertical') {
+                                            return (
+                                                <div key={idx} className="bg-gray-800 text-white p-6 rounded-xl font-mono text-lg shadow-inner flex flex-col md:flex-row items-center gap-8">
+                                                    <div className="flex-col flex items-end">
+                                                        <div className="text-gray-400 mb-2 font-sans text-sm font-bold uppercase tracking-wider w-full text-left">{ex.label}</div>
+                                                        <div className="flex flex-col items-end text-3xl md:text-4xl font-bold tracking-widest bg-gray-900 p-6 rounded-xl border border-gray-700 shadow-md">
+                                                            <div className="pr-2">{ex.num1}</div>
+                                                            <div className="flex justify-between w-full min-w-[5em] border-b-4 border-gray-600 pb-2 mt-2">
+                                                                <span className="text-blue-400 mr-6">{ex.op}</span>
+                                                                <span className="pr-2">{ex.num2}</span>
+                                                            </div>
+                                                            {ex.steps && ex.steps.map((step, i) => (
+                                                                <div key={i} className="pr-2 pt-2 text-gray-400">{step}</div>
+                                                            ))}
+                                                            {ex.steps && <div className="border-b-4 border-gray-600 w-full mt-2 mb-2"></div>}
+                                                            <div className="pr-2 pt-2 text-green-400">{ex.ans}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex-grow bg-gray-700 p-5 rounded-xl border border-gray-600 text-gray-200">
+                                                        <MathText text={ex.explanation} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 );
@@ -1084,161 +928,57 @@
             if (screen === 'admin_login') {
                 return (
                     <div className="min-h-screen flex items-center justify-center p-4">
-                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
-                            <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Admin Access</h2>
+                        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full">
+                            <h2 className="text-2xl font-bold mb-6 text-center text-gray-800"><i className="fas fa-user-shield mr-2"></i>Admin Access</h2>
                             <input 
                                 type="password" 
-                                value={adminPass} 
-                                onChange={e => setAdminPass(e.target.value)} 
-                                className="w-full p-3 border rounded-lg mb-4" 
+                                className="w-full border-2 rounded-lg p-3 mb-4 outline-none focus:border-blue-500 text-center" 
                                 placeholder="Enter Password"
+                                value={adminPass}
+                                onChange={e => setAdminPass(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && loginAdmin()}
                             />
-                            {errorMsg && <p className="text-red-500 text-sm mb-4 text-center">{errorMsg}</p>}
                             <div className="flex gap-2">
-                                <button onClick={() => { setScreen('home'); setErrorMsg(''); }} className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg">Back</button>
-                                <button onClick={() => {
-                                    if (adminPass === 'Admin1') {
-                                        setErrorMsg('');
-                                        setAdminPass('');
-                                        fetchAdminScores();
-                                        setScreen('admin_dashboard');
-                                    } else {
-                                        setErrorMsg('Incorrect Password');
-                                    }
-                                }} className="flex-1 py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-900">Login</button>
+                                <button onClick={() => setScreen('home')} className="w-1/3 bg-gray-200 text-gray-700 font-bold py-3 rounded-lg hover:bg-gray-300 transition">Back</button>
+                                <button onClick={loginAdmin} className="w-2/3 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition">Login</button>
                             </div>
                         </div>
                     </div>
                 );
             }
 
-            if (screen === 'admin_dashboard') {
+            if (screen === 'admin_load') return <div className="min-h-screen flex items-center justify-center text-2xl font-bold">Loading Data...</div>;
+
+            if (screen === 'admin') {
                 return (
-                    <div className="min-h-screen bg-gray-50 p-6 md:p-10">
-                        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-                            <div className="bg-gray-800 text-white p-6 flex justify-between items-center">
-                                <h2 className="text-2xl font-bold">Admin Dashboard: Scores</h2>
-                                <button onClick={() => setScreen('home')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-semibold transition">Exit Admin</button>
+                    <div className="min-h-screen bg-gray-100 p-8">
+                        <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+                            <div className="bg-gray-800 p-6 flex justify-between items-center text-white">
+                                <h2 className="text-2xl font-bold"><i className="fas fa-database mr-2"></i> Student Records</h2>
+                                <button onClick={() => { setScreen('home'); setAdminPass(''); }} className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded font-bold transition">Logout Admin</button>
                             </div>
-                            <div className="p-6">
-                                {scoresList.length === 0 ? (
-                                    <p className="text-center text-gray-500 py-10">No scores recorded yet. Make sure Firebase is connected correctly.</p>
-                                ) : (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider">
-                                                    <th className="p-4 rounded-tl-lg">Date</th>
-                                                    <th className="p-4">Name</th>
-                                                    <th className="p-4">Topic</th>
-                                                    <th className="p-4 rounded-tr-lg">Score</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {scoresList.map((s, i) => (
-                                                    <tr key={i} className="hover:bg-gray-50 transition text-sm">
-                                                        <td className="p-4 text-gray-500">{new Date(s.timestamp).toLocaleDateString()} {new Date(s.timestamp).toLocaleTimeString()}</td>
-                                                        <td className="p-4 font-bold text-gray-800">{s.name}</td>
-                                                        <td className="p-4 text-gray-600">{s.topic}</td>
-                                                        <td className="p-4 font-bold text-blue-600">{s.score} / {s.total}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            if (screen === 'guides') {
-                const currentGuide = GUIDES_DATA[selectedGuideId];
-                const guideGroups = CATEGORIES.reduce((acc, cat) => {
-                    if (!acc[cat.group]) acc[cat.group] = [];
-                    acc[cat.group].push(cat);
-                    return acc;
-                }, {});
-
-                return (
-                    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-                        {/* Mobile Header */}
-                        <div className="md:hidden bg-blue-600 text-white p-4 flex justify-between items-center z-10 sticky top-0 shadow-md">
-                            <h1 className="font-bold text-lg">Study Guides</h1>
-                            <button onClick={() => setScreen('home')} className="text-sm bg-blue-700 px-3 py-1 rounded">Back</button>
-                        </div>
-
-                        {/* Sidebar */}
-                        <div className="w-full md:w-72 bg-white border-r border-gray-200 flex flex-col h-auto md:h-screen sticky top-0 z-0">
-                            <div className="hidden md:flex bg-blue-600 text-white p-5 justify-between items-center">
-                                <h2 className="font-bold text-xl">Study Guides</h2>
-                                <button onClick={() => setScreen('home')} className="text-sm bg-white text-blue-600 px-3 py-1 rounded font-semibold hover:bg-blue-50 transition">Home</button>
-                            </div>
-                            <div className="overflow-y-auto custom-scrollbar flex-1 p-4 max-h-[30vh] md:max-h-full border-b md:border-b-0">
-                                {Object.entries(guideGroups).map(([groupName, cats]) => (
-                                    <div key={groupName} className="mb-6">
-                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">{groupName}</h3>
-                                        <div className="space-y-1">
-                                            {cats.map(c => (
-                                                <button 
-                                                    key={c.id}
-                                                    onClick={() => setSelectedGuideId(c.id)}
-                                                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition ${selectedGuideId === c.id ? 'bg-blue-100 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
-                                                >
-                                                    {c.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Main Content Area */}
-                        <div className="flex-1 p-6 md:p-10 overflow-y-auto h-auto md:h-screen bg-gray-50">
-                            <div className="max-w-3xl mx-auto">
-                                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                                    <h1 className="text-3xl font-extrabold text-gray-800 mb-6 border-b pb-4">{currentGuide.title}</h1>
-                                    
-                                    <div className="space-y-8">
-                                        {currentGuide.cases.map((guideCase, index) => (
-                                            <div key={index} className="bg-gray-50 rounded-xl p-6 border border-gray-100">
-                                                <h3 className="text-xl font-bold text-blue-700 mb-4 flex items-center">
-                                                    <span className="bg-blue-200 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center mr-3 text-sm">{index + 1}</span>
-                                                    {guideCase.name}
-                                                </h3>
-                                                
-                                                <div className="mb-6">
-                                                    <h4 className="font-semibold text-gray-700 mb-2">Steps to Solve (Mga Hakbang):</h4>
-                                                    <ul className="list-none space-y-2 text-gray-600 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                                                        {guideCase.steps.map((step, sIdx) => (
-                                                            <li key={sIdx} className="flex items-start">
-                                                                <span className="text-blue-500 mr-2">•</span>
-                                                                <span>{step}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-
-                                                <div>
-                                                    <h4 className="font-semibold text-gray-700 mb-3">Examples (Mga Halimbawa):</h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        {guideCase.examples.map((ex, eIdx) => (
-                                                            <div key={eIdx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col">
-                                                                <div className="text-sm font-bold text-gray-400 mb-2 uppercase tracking-wide">Example {eIdx + 1}</div>
-                                                                <div className="font-mono text-lg text-gray-800 whitespace-pre-wrap flex-1 bg-gray-50 p-3 rounded">{ex.q}</div>
-                                                                <div className="mt-3 pt-3 border-t border-gray-100 font-mono text-sm text-green-700 whitespace-pre-wrap">
-                                                                    <strong>Answer:</strong><br/>{ex.a}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
+                            <div className="overflow-x-auto p-6">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-100 text-gray-700">
+                                            <th className="p-4 border-b-2 font-bold">Date</th>
+                                            <th className="p-4 border-b-2 font-bold">Name</th>
+                                            <th className="p-4 border-b-2 font-bold">Category</th>
+                                            <th className="p-4 border-b-2 font-bold">Score</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {adminData.map((d, i) => (
+                                            <tr key={i} className="hover:bg-gray-50 border-b">
+                                                <td className="p-4 text-gray-600">{new Date(d.date).toLocaleString()}</td>
+                                                <td className="p-4 font-semibold text-gray-800">{d.name}</td>
+                                                <td className="p-4">{d.category}</td>
+                                                <td className="p-4 font-bold text-blue-600">{d.score} / {d.total}</td>
+                                            </tr>
                                         ))}
-                                    </div>
-                                </div>
+                                        {adminData.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-gray-500">No records found.</td></tr>}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
