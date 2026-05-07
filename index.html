@@ -110,6 +110,30 @@
             return { a: parseInt(aStr), b: parseInt(bStr) };
         };
 
+        const checkAdditionRegrouping = (a, b) => {
+            let strA = a.toString().split('').reverse();
+            let strB = b.toString().split('').reverse();
+            let len = Math.max(strA.length, strB.length);
+            for (let i = 0; i < len; i++) {
+                let d1 = parseInt(strA[i] || 0);
+                let d2 = parseInt(strB[i] || 0);
+                if (d1 + d2 >= 10) return true;
+            }
+            return false;
+        };
+
+        const checkSubtractionRegrouping = (a, b) => {
+            let strA = a.toString().split('').reverse();
+            let strB = b.toString().split('').reverse();
+            let len = Math.max(strA.length, strB.length);
+            for (let i = 0; i < len; i++) {
+                let d1 = parseInt(strA[i] || 0);
+                let d2 = parseInt(strB[i] || 0);
+                if (d1 < d2) return true;
+            }
+            return false;
+        };
+
         const generateNumber = (digits, regrouping, op) => {
             if (regrouping === 'no' && op === '+') return generateNoRegroupingAdd(digits);
             if (regrouping === 'no' && op === '-') return generateNoRegroupingSub(digits);
@@ -117,12 +141,28 @@
             // Standard/Mixed generation
             const min = Math.pow(10, digits - 1);
             const max = Math.pow(10, digits) - 1;
-            let a = randomInt(min, max);
-            let b = randomInt(min, max);
             
-            if (op === '-' && b > a) {
-                let temp = a; a = b; b = temp;
-            }
+            let a, b;
+            let attempts = 0;
+            do {
+                a = randomInt(min, max);
+                b = randomInt(min, max);
+                
+                if (op === '-' && b > a) {
+                    let temp = a; a = b; b = temp;
+                }
+                
+                // Strictly enforce regrouping if selected
+                if (regrouping === 'yes' && op === '+') {
+                    if (checkAdditionRegrouping(a, b)) break;
+                } else if (regrouping === 'yes' && op === '-') {
+                    if (checkSubtractionRegrouping(a, b)) break;
+                } else {
+                    break; // Mixed regrouping / not applicable
+                }
+                attempts++;
+            } while (attempts < 50);
+
             return { a, b };
         };
 
@@ -236,8 +276,9 @@
                     };
                 }
                 case 'dec_mul': {
-                    const a = randomInt(1, 99) / 10;
-                    const b = randomInt(1, 99) / 10;
+                    const maxVal = Math.pow(10, digits) - 1;
+                    const a = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
+                    const b = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
                     const ans = parseFloat((a * b).toPrecision(12)).toString();
                     return {
                         text: `${a} × ${b}`,
@@ -247,8 +288,9 @@
                     };
                 }
                 case 'dec_div': {
-                    const divisor = randomInt(1, 9) / 10;
-                    const quotient = randomInt(1, 99) / 10;
+                    const maxVal = Math.pow(10, digits) - 1;
+                    const divisor = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
+                    const quotient = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
                     const dividend = parseFloat((divisor * quotient).toPrecision(12));
                     return {
                         text: `${dividend} ÷ ${divisor}`,
@@ -465,7 +507,7 @@
                 setTopic(selectedTopic);
                 // Reset defaults based on topic
                 let defaultDigits = 2;
-                if (selectedTopic.includes('dec')) defaultDigits = 1; // 1 decimal place generation baseline
+                if (selectedTopic.id && selectedTopic.id.includes('dec')) defaultDigits = 1; // Ensure we read .id properly to avoid crash
                 setSettings({ ...settings, digits: defaultDigits, regrouping: 'mixed', sign: 'mixed', table: 'mixed', numQuestions: 10 });
                 setScreen('settings');
             };
