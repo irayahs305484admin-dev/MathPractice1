@@ -187,6 +187,30 @@
                     }
                 ]
             },
+            'whole_mixed': {
+                title: 'Whole Numbers: Mixed Operations',
+                cases: [{ name: 'Order of Operations (PEMDAS)', steps: ['1. Follow standard order: Parentheses, Exponents, Multiplication/Division, Addition/Subtraction.'], examples: [{ q: '5 + 3 x 2', a: '11\n(Multiply first: 3x2=6. Then 5+6=11)' }] }]
+            },
+            'dec_add': {
+                title: 'Decimals: Addition',
+                cases: [{ name: 'Aligning the Decimal Point', steps: ['1. Line up the decimal points.', '2. Add zeros to the end if necessary to make them the same length.', '3. Add normally and bring down the decimal point.'], examples: [{ q: '2.5 + 1.25', a: '3.75\n(2.50 + 1.25 = 3.75)' }] }]
+            },
+            'dec_sub': {
+                title: 'Decimals: Subtraction',
+                cases: [{ name: 'Aligning the Decimal Point', steps: ['1. Line up the decimal points.', '2. Add zeros to the end if needed.', '3. Subtract normally and bring down the decimal.'], examples: [{ q: '5.4 - 2.15', a: '3.25\n(5.40 - 2.15 = 3.25)' }] }]
+            },
+            'dec_mul': {
+                title: 'Decimals: Multiplication',
+                cases: [{ name: 'Counting Decimal Places', steps: ['1. Multiply normally, ignoring decimals.', '2. Count the total number of decimal places in the problem.', '3. Give the answer that same number of decimal places.'], examples: [{ q: '1.2 x 0.3', a: '0.36\n(12x3=36. Total 2 decimal places -> 0.36)' }] }]
+            },
+            'dec_div': {
+                title: 'Decimals: Division',
+                cases: [{ name: 'Dividing by a Decimal', steps: ['1. Move the decimal point of the outside number (divisor) right until it is whole.', '2. Move the inside number (dividend) decimal the same number of places.', '3. Divide normally and bring decimal straight up.'], examples: [{ q: '1.25 ÷ 0.5', a: '2.5\n(Move 1 place: 12.5 ÷ 5 = 2.5)' }] }]
+            },
+            'dec_mixed': {
+                title: 'Decimals: Mixed Operations',
+                cases: [{ name: 'Order of Operations (PEMDAS)', steps: ['1. Follow standard order: Parentheses, Exponents, Multiplication/Division, Addition/Subtraction.'], examples: [{ q: '1.5 + 2 x 0.5', a: '2.5\n(Multiply first: 2x0.5=1. Then 1.5+1=2.5)' }] }]
+            },
             'frac_add': {
                 title: 'Fractions: Addition',
                 cases: [
@@ -210,6 +234,90 @@
                         examples: [
                             { q: '1/2 + 1/3', a: '5/6\n(LCD is 6. 1/2 = 3/6. 1/3 = 2/6. 3/6 + 2/6 = 5/6)' }
                         ]
+                    }
+                ]
+            },
+            'frac_sub': {
+                title: 'Fractions: Subtraction',
+                cases: [
+                    {
+                        name: 'Case 1: Similar Fractions',
+                        steps: [
+                            '1. Subtract the numerators (top numbers).',
+                            '2. Keep the denominator the same. Simplify if needed.'
+                        ],
+                        examples: [
+                            { q: '4/5 - 1/5', a: '3/5\n(4-1=3, keep 5)' }
+                        ]
+                    },
+                    {
+                        name: 'Case 2: Dissimilar Fractions',
+                        steps: [
+                            '1. Find the Least Common Denominator (LCD).',
+                            '2. Convert both to equivalent fractions.',
+                            '3. Subtract the numerators.'
+                        ],
+                        examples: [
+                            { q: '3/4 - 1/3', a: '5/12\n(LCD is 12. 3/4=9/12, 1/3=4/12. 9/12-4/12=5/12)' }
+                        ]
+                    }
+                ]
+            },
+            'frac_mul': {
+                title: 'Fractions: Multiplication',
+                cases: [
+                    {
+                        name: 'Case 1: Multiplying Fractions',
+                        steps: [
+                            '1. Multiply the numerators (top x top).',
+                            '2. Multiply the denominators (bottom x bottom).',
+                            '3. Simplify the resulting fraction.'
+                        ],
+                        examples: [
+                            { q: '2/3 x 4/5', a: '8/15\n(2x4=8, 3x5=15)' }
+                        ]
+                    }
+                ]
+            },
+            'frac_div': {
+                title: 'Fractions: Division',
+                cases: [
+                    {
+                        name: 'Case 1: Keep-Change-Flip (KCF)',
+                        steps: [
+                            '1. KEEP the first fraction.',
+                            '2. CHANGE division to multiplication.',
+                            '3. FLIP the second fraction (use reciprocal).',
+                            '4. Multiply normally.'
+                        ],
+                        examples: [
+                            { q: '2/3 ÷ 4/5', a: '10/12 -> 5/6\n(Keep 2/3, Change to x, Flip to 5/4. 2/3 x 5/4 = 10/12 = 5/6)' }
+                        ]
+                    }
+                ]
+            },
+            'frac_simplify': {
+                title: 'Fractions: Simplifying',
+                cases: [
+                    {
+                        name: 'Case 1: Finding Lowest Terms',
+                        steps: [
+                            '1. Find the Greatest Common Factor (GCF) of numerator and denominator.',
+                            '2. Divide both top and bottom by the GCF.'
+                        ],
+                        examples: [
+                            { q: 'Simplify 8/12', a: '2/3\n(GCF is 4. 8÷4=2, 12÷4=3)' }
+                        ]
+                    }
+                ]
+            },
+            'frac_mixed': {
+                title: 'Fractions: Mixed Operations',
+                cases: [
+                    {
+                        name: 'Case 1: Order of Operations',
+                        steps: ['1. Use PEMDAS. Multiply/Divide first, then Add/Subtract.'],
+                        examples: [{ q: '1/2 + 2/3 x 3/4', a: '1\n(Multiply: 2/3 x 3/4 = 6/12 = 1/2. Add: 1/2 + 1/2 = 1)' }]
                     }
                 ]
             },
@@ -238,6 +346,98 @@
                     }
                 ]
             },
+            'int_sub': {
+                title: 'Integers: Subtraction',
+                cases: [
+                    {
+                        name: 'Case 1: Keep-Change-Change',
+                        steps: [
+                            '1. Keep the first number exactly the same.',
+                            '2. Change subtraction to addition.',
+                            '3. Change the sign of the second number to its opposite.',
+                            '4. Follow addition rules.'
+                        ],
+                        examples: [
+                            { q: '5 - (-3)', a: '8\n(5 + 3 = 8)' },
+                            { q: '-7 - 4', a: '-11\n(-7 + -4 = -11)' }
+                        ]
+                    }
+                ]
+            },
+            'int_mul': {
+                title: 'Integers: Multiplication',
+                cases: [
+                    {
+                        name: 'Case 1: Multiplication Rules',
+                        steps: [
+                            '1. Multiply normally.',
+                            '2. Same signs = POSITIVE (+).',
+                            '3. Different signs = NEGATIVE (-).'
+                        ],
+                        examples: [
+                            { q: '(-4) x (-5)', a: '20\n(Same signs -> positive)' },
+                            { q: '(-6) x 3', a: '-18\n(Different signs -> negative)' }
+                        ]
+                    }
+                ]
+            },
+            'int_div': {
+                title: 'Integers: Division',
+                cases: [
+                    {
+                        name: 'Case 1: Division Rules',
+                        steps: [
+                            '1. Divide normally.',
+                            '2. Same signs = POSITIVE (+).',
+                            '3. Different signs = NEGATIVE (-).'
+                        ],
+                        examples: [
+                            { q: '(-20) ÷ (-4)', a: '5\n(Same signs -> positive)' },
+                            { q: '18 ÷ (-6)', a: '-3\n(Different signs -> negative)' }
+                        ]
+                    }
+                ]
+            },
+            'int_mixed': {
+                title: 'Integers: Mixed Operations',
+                cases: [
+                    {
+                        name: 'Case 1: PEMDAS',
+                        steps: ['1. Follow Order of Operations (Parentheses, Exponents, Multiply/Divide, Add/Subtract).'],
+                        examples: [{ q: '-3 + 4 x (-2)', a: '-11\n(Multiply: 4 x -2 = -8. Add: -3 + -8 = -11)' }]
+                    }
+                ]
+            },
+            'perc_base': {
+                title: 'Percentages: Find the Base',
+                cases: [
+                    {
+                        name: 'Formula: Base = Percentage ÷ Rate',
+                        steps: [
+                            '1. Convert the rate (percent) to a decimal.',
+                            '2. Divide the value (percentage) by the decimal.'
+                        ],
+                        examples: [
+                            { q: '15 is 30% of what?', a: '50\n(30% = 0.30. 15 ÷ 0.30 = 50)' }
+                        ]
+                    }
+                ]
+            },
+            'perc_rate': {
+                title: 'Percentages: Find the Rate/Percent',
+                cases: [
+                    {
+                        name: 'Formula: Rate = (Percentage ÷ Base) x 100',
+                        steps: [
+                            '1. Divide the value by the base.',
+                            '2. Multiply by 100 and add %.'
+                        ],
+                        examples: [
+                            { q: '20 is what percent of 80?', a: '25%\n(20 ÷ 80 = 0.25. 0.25 x 100 = 25%)' }
+                        ]
+                    }
+                ]
+            },
             'perc_value': {
                 title: 'Percentages: Find Value',
                 cases: [
@@ -249,6 +449,38 @@
                         ],
                         examples: [
                             { q: 'What is 15% of 60?', a: '9\n(0.15 x 60 = 9)' }
+                        ]
+                    }
+                ]
+            },
+            'exponents': {
+                title: 'Advanced: Evaluating Exponents',
+                cases: [
+                    {
+                        name: 'Case 1: Base and Power',
+                        steps: [
+                            '1. Identify base (large number) and exponent (small number).',
+                            '2. Multiply the base by itself the number of times indicated by exponent.'
+                        ],
+                        examples: [
+                            { q: '3^4', a: '81\n(3 x 3 x 3 x 3 = 81)' }
+                        ]
+                    }
+                ]
+            },
+            'laws_exp': {
+                title: 'Advanced: Laws of Exponents',
+                cases: [
+                    {
+                        name: 'Case 1: Product and Quotient Rules',
+                        steps: [
+                            '1. Product Rule: Multiplying same bases -> add exponents (x^a * x^b = x^(a+b)).',
+                            '2. Quotient Rule: Dividing same bases -> subtract exponents (x^a / x^b = x^(a-b)).',
+                            '3. Power Rule: (x^a)^b = x^(a*b).'
+                        ],
+                        examples: [
+                            { q: 'x^3 * x^2', a: 'x^5\n(Add 3 + 2 = 5)' },
+                            { q: '(x^2)^4', a: 'x^8\n(Multiply 2 x 4 = 8)' }
                         ]
                     }
                 ]
