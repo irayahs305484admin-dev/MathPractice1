@@ -180,6 +180,13 @@
         const generateQuestion = (topic, settings) => {
             const { digits, regrouping, sign, table } = settings;
 
+            if (topic.endsWith('_mixed')) {
+                const ops = ['add', 'sub', 'mul', 'div'];
+                const randomOp = ops[randomInt(0, 3)];
+                const baseTopic = topic.replace('_mixed', `_${randomOp}`);
+                return generateQuestion(baseTopic, settings);
+            }
+
             // Apply Sign Logic
             const applySign = (val) => {
                 if (sign === 'positive') return Math.abs(val);
@@ -218,8 +225,10 @@
                 case 'int_mul': {
                     let a, b;
                     if (table === 'mixed') {
-                        a = randomInt(1, Math.pow(10, digits) - 1);
-                        b = randomInt(1, Math.pow(10, digits) - 1);
+                        const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
+                        const maxVal = Math.pow(10, digits) - 1;
+                        a = randomInt(minVal, maxVal);
+                        b = randomInt(minVal, maxVal);
                     } else {
                         a = parseInt(table);
                         b = randomInt(1, 12);
@@ -238,8 +247,10 @@
                 case 'int_div': {
                     let divisor, quotient;
                     if (table === 'mixed') {
-                        divisor = randomInt(1, Math.pow(10, digits) - 1);
-                        quotient = randomInt(1, 12);
+                        const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
+                        const maxVal = Math.pow(10, digits) - 1;
+                        divisor = randomInt(minVal, maxVal);
+                        quotient = randomInt(minVal, maxVal);
                     } else {
                         divisor = parseInt(table);
                         quotient = randomInt(1, 12);
@@ -276,9 +287,12 @@
                     };
                 }
                 case 'dec_mul': {
+                    const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
                     const maxVal = Math.pow(10, digits) - 1;
-                    const a = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
-                    const b = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
+                    const aNum = randomInt(minVal, maxVal);
+                    const bNum = randomInt(minVal, maxVal);
+                    const a = aNum / Math.pow(10, randomInt(1, digits));
+                    const b = bNum / Math.pow(10, randomInt(1, digits));
                     const ans = parseFloat((a * b).toPrecision(12)).toString();
                     return {
                         text: `${a} × ${b}`,
@@ -288,9 +302,12 @@
                     };
                 }
                 case 'dec_div': {
+                    const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
                     const maxVal = Math.pow(10, digits) - 1;
-                    const divisor = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
-                    const quotient = randomInt(1, maxVal) / Math.pow(10, randomInt(1, digits));
+                    const divisorNum = randomInt(minVal, maxVal);
+                    const quotientNum = randomInt(minVal, maxVal);
+                    const divisor = divisorNum / Math.pow(10, randomInt(1, digits));
+                    const quotient = quotientNum / Math.pow(10, randomInt(1, digits));
                     const dividend = parseFloat((divisor * quotient).toPrecision(12));
                     return {
                         text: `${dividend} ÷ ${divisor}`,
@@ -428,19 +445,23 @@
             { id: 'whole_sub', label: 'Whole Numbers: Subtraction', group: 'Whole Numbers' },
             { id: 'whole_mul', label: 'Whole Numbers: Multiplication', group: 'Whole Numbers' },
             { id: 'whole_div', label: 'Whole Numbers: Division', group: 'Whole Numbers' },
+            { id: 'whole_mixed', label: 'Whole Numbers: Mixed Operations', group: 'Whole Numbers' },
             { id: 'dec_add', label: 'Decimals: Addition', group: 'Decimals' },
             { id: 'dec_sub', label: 'Decimals: Subtraction', group: 'Decimals' },
             { id: 'dec_mul', label: 'Decimals: Multiplication', group: 'Decimals' },
             { id: 'dec_div', label: 'Decimals: Division', group: 'Decimals' },
+            { id: 'dec_mixed', label: 'Decimals: Mixed Operations', group: 'Decimals' },
             { id: 'frac_add', label: 'Fractions: Addition', group: 'Fractions' },
             { id: 'frac_sub', label: 'Fractions: Subtraction', group: 'Fractions' },
             { id: 'frac_mul', label: 'Fractions: Multiplication', group: 'Fractions' },
             { id: 'frac_div', label: 'Fractions: Division', group: 'Fractions' },
+            { id: 'frac_mixed', label: 'Fractions: Mixed Operations', group: 'Fractions' },
             { id: 'frac_simplify', label: 'Fractions: Simplify', group: 'Fractions' },
             { id: 'int_add', label: 'Integers: Addition', group: 'Integers' },
             { id: 'int_sub', label: 'Integers: Subtraction', group: 'Integers' },
             { id: 'int_mul', label: 'Integers: Multiplication', group: 'Integers' },
             { id: 'int_div', label: 'Integers: Division', group: 'Integers' },
+            { id: 'int_mixed', label: 'Integers: Mixed Operations', group: 'Integers' },
             { id: 'percentages', label: 'Percentages (Base, Rate, Value)', group: 'Advanced' },
             { id: 'exponents', label: 'Exponents', group: 'Advanced' },
             { id: 'laws_exp', label: 'Laws of Exponents', group: 'Advanced' },
@@ -754,7 +775,7 @@
                                 )}
 
                                 {/* Regrouping (for addition/subtraction of whole/dec/int) */}
-                                {['whole_add', 'whole_sub', 'dec_add', 'dec_sub', 'int_add', 'int_sub'].includes(topic.id) && (
+                                {/(whole|dec|int)_(add|sub|mixed)/.test(topic.id) && (
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-1">Regrouping (Borrowing/Carrying)</label>
                                         <select 
@@ -786,7 +807,7 @@
                                 )}
 
                                 {/* Tables (for multiplication/division of whole/integers) */}
-                                {['whole_mul', 'whole_div', 'int_mul', 'int_div'].includes(topic.id) && (
+                                {/(whole|int)_(mul|div|mixed)/.test(topic.id) && (
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-1">Times Tables (1-12)</label>
                                         <select 
