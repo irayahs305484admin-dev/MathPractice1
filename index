@@ -552,21 +552,34 @@
             const finishQuiz = async () => {
                 setScreen('results');
                 
+                const finalScore = (quizStatus === 'success' && currentTries === 0 && currentIndex === questions.length-1) ? score + 1 : score;
+                
                 // Save to Firestore
                 const { db, auth, appId, collection, addDoc } = window.FirebaseApp;
-                if (auth.currentUser) {
+                if (auth && auth.currentUser) {
                     try {
                         const path = collection(db, 'artifacts', appId, 'public', 'data', 'math_scores');
                         await addDoc(path, {
                             name: userName,
                             topic: topic.label,
-                            score: (quizStatus === 'success' && currentTries === 0 && currentIndex === questions.length-1) ? score + 1 : score, // account for last correct answer if state hasn't flushed
+                            score: finalScore,
                             total: questions.length,
                             timestamp: new Date().toISOString()
                         });
                     } catch (e) {
                         console.error("Failed to save score:", e);
                     }
+                }
+
+                // Save to Google Apps Script (if deployed as Web App)
+                if (typeof google !== 'undefined' && google.script && google.script.run) {
+                    google.script.run.withFailureHandler(console.error).saveScoreToSheet({
+                        name: userName,
+                        topic: topic.label,
+                        score: finalScore,
+                        total: questions.length,
+                        timestamp: new Date().toISOString()
+                    });
                 }
             };
 
