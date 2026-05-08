@@ -1,1097 +1,898 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Math Practice Pro</title>
+import React, { useState, useEffect, useMemo } from 'react';
+import { UserCircle, Settings, Play, ShieldAlert, ArrowLeft, CheckCircle2, XCircle, RotateCcw, Home } from 'lucide-react';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+
+// --- Firebase Initialization ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDdcqfdQDC92XG3f8VOe8TjkbNMVje2p8E",
+  authDomain: "math1-6e1bf.firebaseapp.com",
+  projectId: "math1-6e1bf",
+  storageBucket: "math1-6e1bf.firebasestorage.app",
+  messagingSenderId: "596735974126",
+  appId: "1:596735974126:web:7393e4da3acf9c3ada31ff"
+};
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'math-practice-pro';
+
+let app, auth, db;
+try {
+    if (!firebase.apps.length) {
+        app = firebase.initializeApp(firebaseConfig);
+    } else {
+        app = firebase.app();
+    }
+    auth = firebase.auth();
+    db = firebase.firestore();
+} catch (e) {
+    console.error("Failed to initialize Firebase", e);
+}
+
+// --- Utility Functions ---
+const gcd = (a, b) => b === 0 ? Math.abs(a) : gcd(b, a % b);
+
+const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+// Helper to generate a number string with a specific number of digits
+const generateNumberWithDigits = (digits) => {
+  if (digits === 1) return getRandomInt(1, 9).toString();
+  const min = Math.pow(10, digits - 1);
+  const max = Math.pow(10, digits) - 1;
+  return getRandomInt(min, max).toString();
+};
+
+// --- Question Generators ---
+
+// Generates Addition/Subtraction for Whole Numbers & Integers with Regrouping Logic
+const generateWholeOrIntegerQuestion = (operation, config, isInteger = false) => {
+  let num1, num2;
+  const digits = parseInt(config.digits) || 2;
+  const regrouping = config.regrouping || 'mixed'; // 'yes', 'no', 'mixed'
+  
+  if (operation === 'add') {
+    if (regrouping === 'no') {
+      num1 = ''; num2 = '';
+      for (let i = 0; i < digits; i++) {
+        const d1 = getRandomInt(1, i === 0 ? 8 : 9); // Ensure first digit isn't 0, leave room for d2
+        const d2 = getRandomInt(0, 9 - d1);
+        num1 += d1; num2 += d2;
+      }
+    } else {
+      num1 = generateNumberWithDigits(digits);
+      num2 = generateNumberWithDigits(digits);
+    }
+  } else if (operation === 'sub') {
+    if (regrouping === 'no') {
+      num1 = ''; num2 = '';
+      for (let i = 0; i < digits; i++) {
+        const d1 = getRandomInt(1, 9);
+        const d2 = getRandomInt(0, d1); // d2 must be <= d1 to avoid regrouping
+        num1 += d1; num2 += d2;
+      }
+    } else {
+      num1 = generateNumberWithDigits(digits);
+      num2 = generateNumberWithDigits(digits);
+      // Ensure positive result for whole numbers, or let it be negative for integers if config allows
+      if (!isInteger && parseInt(num2) > parseInt(num1)) {
+        [num1, num2] = [num2, num1]; // Swap
+      }
+    }
+  } else if (operation === 'mul' || operation === 'div') {
+     const table = config.table === 'any' ? getRandomInt(1, 12) : parseInt(config.table || 5);
+     const multiplier = getRandomInt(1, 12);
+     if (operation === 'mul') {
+         num1 = table.toString();
+         num2 = multiplier.toString();
+     } else {
+         // Division: ensuring clean division based on tables
+         num1 = (table * multiplier).toString();
+         num2 = table.toString();
+     }
+  }
+
+  // Apply integer signs
+  if (isInteger) {
+    const signs = config.signs || 'both'; // 'positive', 'negative', 'both'
+    const applySign = (num) => {
+      if (signs === 'positive') return Math.abs(parseInt(num));
+      if (signs === 'negative') return -Math.abs(parseInt(num));
+      return getRandomInt(0, 1) === 0 ? parseInt(num) : -parseInt(num);
+    };
+    num1 = applySign(num1);
+    num2 = applySign(num2);
+    // Ensure we don't divide by zero just in case
+    if (operation === 'div' && num2 === 0) num2 = 1;
+  } else {
+    num1 = parseInt(num1);
+    num2 = parseInt(num2);
+  }
+
+  let answer;
+  switch (operation) {
+    case 'add': answer = num1 + num2; break;
+    case 'sub': answer = num1 - num2; break;
+    case 'mul': answer = num1 * num2; break;
+    case 'div': answer = num1 / num2; break;
+  }
+
+  const opSymbol = { 'add': '+', 'sub': '-', 'mul': '×', 'div': '÷' }[operation];
+  return {
+    type: 'standard',
+    display: `${num1} ${opSymbol} ${num2 < 0 ? `(${num2})` : num2}`,
+    correctAnswer: answer.toString()
+  };
+};
+
+const generateDecimalQuestion = (operation, config) => {
+  const digitsBefore = parseInt(config.digitsBefore) || 1;
+  const digitsAfter = parseInt(config.digitsAfter) || 1;
+  
+  const genDecimal = () => {
+    const before = generateNumberWithDigits(digitsBefore);
+    const after = generateNumberWithDigits(digitsAfter);
+    return parseFloat(`${before}.${after}`);
+  };
+
+  let num1 = genDecimal();
+  let num2 = genDecimal();
+  let answer;
+
+  if (operation === 'sub' && num2 > num1) [num1, num2] = [num2, num1];
+  
+  if (operation === 'mul' || operation === 'div') {
+     // Keep it simple for practice: mostly 1 decimal place for easy mental math if dividing
+     num1 = parseFloat((getRandomInt(1, 99) / 10).toFixed(1));
+     num2 = parseFloat((getRandomInt(1, 10)).toFixed(1)); // Smaller divisor
+     if (operation === 'div') {
+         num1 = parseFloat((num1 * num2).toFixed(2)); // Ensure cleanish division
+     }
+  }
+
+  switch (operation) {
+    case 'add': answer = (num1 + num2).toFixed(digitsAfter); break;
+    case 'sub': answer = (num1 - num2).toFixed(digitsAfter); break;
+    case 'mul': answer = (num1 * num2).toFixed(digitsAfter + 1); break; // roughly
+    case 'div': answer = (num1 / num2).toFixed(1); break; // limit division decimals
+  }
+
+  // Strip trailing zeros for answer comparison if it's a clean number
+  answer = parseFloat(answer).toString();
+
+  const opSymbol = { 'add': '+', 'sub': '-', 'mul': '×', 'div': '÷' }[operation];
+  return {
+    type: 'standard',
+    display: `${num1} ${opSymbol} ${num2}`,
+    correctAnswer: answer
+  };
+};
+
+const generateFractionQuestion = (operation, config) => {
+  // Simple fractions for practice
+  const genFrac = () => ({ n: getRandomInt(1, 5), d: getRandomInt(2, 6) });
+  let f1 = genFrac();
+  let f2 = genFrac();
+
+  // If addition/subtraction, maybe make denominators the same based on config (hardcoded to same for simplicity in this demo unless advanced)
+  if (operation === 'add' || operation === 'sub') {
+      f2.d = f1.d; // Like denominators for fundamental practice
+      if (operation === 'sub' && f1.n < f2.n) {
+          f1.n += f2.n; // Ensure positive result
+      }
+  }
+
+  let ansN, ansD;
+  switch (operation) {
+    case 'add':
+      ansN = (f1.n * f2.d) + (f2.n * f1.d);
+      ansD = f1.d * f2.d;
+      break;
+    case 'sub':
+      ansN = (f1.n * f2.d) - (f2.n * f1.d);
+      ansD = f1.d * f2.d;
+      break;
+    case 'mul':
+      ansN = f1.n * f2.n;
+      ansD = f1.d * f2.d;
+      break;
+    case 'div':
+      ansN = f1.n * f2.d;
+      ansD = f1.d * f2.n;
+      break;
+  }
+
+  // Simplify answer
+  const divisor = gcd(ansN, ansD);
+  ansN = ansN / divisor;
+  ansD = ansD / divisor;
+  
+  if (ansD < 0) { ansN *= -1; ansD *= -1; }
+
+  const opSymbol = { 'add': '+', 'sub': '-', 'mul': '×', 'div': '÷' }[operation];
+  
+  return {
+    type: 'fraction_op',
+    f1, f2, opSymbol,
+    correctNum: ansN.toString(),
+    correctDen: ansD.toString(),
+    isWhole: ansD === 1
+  };
+};
+
+const generatePercentageQuestion = () => {
+    const types = ['find_percentage', 'find_base', 'find_rate'];
+    const type = types[getRandomInt(0, 2)];
+    const base = getRandomInt(1, 20) * 10; // 10, 20... 200
+    const rate = getRandomInt(1, 10) * 10; // 10%, 20%... 100%
+    const percentage = (base * rate) / 100;
+
+    if (type === 'find_percentage') {
+        return { type: 'standard', display: `What is ${rate}% of ${base}?`, correctAnswer: percentage.toString() };
+    } else if (type === 'find_base') {
+        return { type: 'standard', display: `${percentage} is ${rate}% of what number?`, correctAnswer: base.toString() };
+    } else {
+        return { type: 'standard', display: `${percentage} is what percent of ${base}?`, correctAnswer: rate.toString() };
+    }
+};
+
+const generateExponentQuestion = () => {
+    const types = ['evaluate', 'laws'];
+    const type = types[getRandomInt(0, 1)];
+
+    if (type === 'evaluate') {
+        const base = getRandomInt(2, 5);
+        const power = getRandomInt(2, 4);
+        return { type: 'standard', display: `Evaluate: ${base}^${power}`, correctAnswer: Math.pow(base, power).toString() };
+    } else {
+        // Laws: Product rule
+        const base = getRandomInt(2, 5);
+        const p1 = getRandomInt(2, 5);
+        const p2 = getRandomInt(2, 5);
+        return { type: 'standard', display: `Simplify (give the new exponent): ${base}^${p1} × ${base}^${p2}`, correctAnswer: (p1 + p2).toString() };
+    }
+};
+
+const generateSimplifyFractionQuestion = () => {
+    const factor = getRandomInt(2, 5);
+    const simplifiedNum = getRandomInt(1, 5);
+    const simplifiedDen = getRandomInt(simplifiedNum + 1, 9); // Ensure proper fraction
     
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-            color: #1f2937;
-        }
-        .fraction-line {
-            border-bottom: 2px solid currentColor;
-        }
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1; 
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
-        }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
+    // Ensure they don't share another factor
+    if (gcd(simplifiedNum, simplifiedDen) !== 1) return generateSimplifyFractionQuestion();
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+    const num = simplifiedNum * factor;
+    const den = simplifiedDen * factor;
 
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyAIMaJVv47sBHgrqUcWnwqR0e5tN0ZDoQs",
-            authDomain: "math1-5f20d.firebaseapp.com",
-            projectId: "math1-5f20d",
-            storageBucket: "math1-5f20d.firebasestorage.app",
-            messagingSenderId: "12986487888",
-            appId: "1:12986487888:web:08abef976a309e771fad55"
-        };
+    return {
+        type: 'fraction_simplify',
+        displayNum: num,
+        displayDen: den,
+        correctNum: simplifiedNum.toString(),
+        correctDen: simplifiedDen.toString()
+    };
+};
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        
-        // Keep these variables for the platform's specific paths and authentication
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'math-practice-default';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // Make Firebase available to React
-        window.FirebaseApp = { db, auth, appId, signInAnonymously, signInWithCustomToken, initialAuthToken, collection, addDoc, getDocs };
-    </script>
-
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
-
-        // Utility: Random Integer
-        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-
-        // --- MATH GENERATORS ---
-
-        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-
-        const generateNoRegroupingAdd = (digits) => {
-            let aStr = '', bStr = '';
-            for (let i = 0; i < digits; i++) {
-                const maxD1 = i === 0 ? 9 : 9;
-                const minD1 = i === 0 ? 1 : 0;
-                const d1 = randomInt(minD1, maxD1);
-                const maxD2 = 9 - d1;
-                const minD2 = i === 0 && d1 === 9 ? 0 : (i===0 ? 1 : 0); // avoid leading zero
-                const d2 = randomInt(Math.min(minD2, maxD2), maxD2);
-                aStr += d1;
-                bStr += d2;
-            }
-            return { a: parseInt(aStr), b: parseInt(bStr) };
-        };
-
-        const generateNoRegroupingSub = (digits) => {
-            let aStr = '', bStr = '';
-            for (let i = 0; i < digits; i++) {
-                const maxD1 = 9;
-                const minD1 = i === 0 ? 1 : 0;
-                const d1 = randomInt(minD1, maxD1);
-                const minD2 = i === 0 ? 1 : 0;
-                const d2 = randomInt(minD2, d1);
-                aStr += d1;
-                bStr += d2;
-            }
-            return { a: parseInt(aStr), b: parseInt(bStr) };
-        };
-
-        const checkAdditionRegrouping = (a, b) => {
-            let strA = a.toString().split('').reverse();
-            let strB = b.toString().split('').reverse();
-            let len = Math.max(strA.length, strB.length);
-            for (let i = 0; i < len; i++) {
-                let d1 = parseInt(strA[i] || 0);
-                let d2 = parseInt(strB[i] || 0);
-                if (d1 + d2 >= 10) return true;
-            }
-            return false;
-        };
-
-        const checkSubtractionRegrouping = (a, b) => {
-            let strA = a.toString().split('').reverse();
-            let strB = b.toString().split('').reverse();
-            let len = Math.max(strA.length, strB.length);
-            for (let i = 0; i < len; i++) {
-                let d1 = parseInt(strA[i] || 0);
-                let d2 = parseInt(strB[i] || 0);
-                if (d1 < d2) return true;
-            }
-            return false;
-        };
-
-        const generateNumber = (digits, regrouping, op) => {
-            if (regrouping === 'no' && op === '+') return generateNoRegroupingAdd(digits);
-            if (regrouping === 'no' && op === '-') return generateNoRegroupingSub(digits);
-            
-            // Standard/Mixed generation
-            const min = Math.pow(10, digits - 1);
-            const max = Math.pow(10, digits) - 1;
-            
-            let a, b;
-            let attempts = 0;
-            do {
-                a = randomInt(min, max);
-                b = randomInt(min, max);
-                
-                if (op === '-' && b > a) {
-                    let temp = a; a = b; b = temp;
-                }
-                
-                // Strictly enforce regrouping if selected
-                if (regrouping === 'yes' && op === '+') {
-                    if (checkAdditionRegrouping(a, b)) break;
-                } else if (regrouping === 'yes' && op === '-') {
-                    if (checkSubtractionRegrouping(a, b)) break;
-                } else {
-                    break; // Mixed regrouping / not applicable
-                }
-                attempts++;
-            } while (attempts < 50);
-
-            return { a, b };
-        };
-
-        const FractionDisplay = ({ num, den, sign = '' }) => (
-            <div className="inline-flex items-center gap-2 mx-1 align-middle text-xl">
-                {sign && <span>{sign}</span>}
-                <div className="flex flex-col items-center leading-tight">
-                    <span className="px-1 border-b-2 border-black w-full text-center">{num}</span>
-                    <span className="px-1 w-full text-center">{den}</span>
-                </div>
-            </div>
-        );
-
-        // Main Generator Router
-        const generateQuestion = (topic, settings) => {
-            const { digits, regrouping, sign, table } = settings;
-
-            if (topic.endsWith('_mixed')) {
-                const ops = ['add', 'sub', 'mul', 'div'];
-                const randomOp = ops[randomInt(0, 3)];
-                const baseTopic = topic.replace('_mixed', `_${randomOp}`);
-                return generateQuestion(baseTopic, settings);
-            }
-
-            // Apply Sign Logic
-            const applySign = (val) => {
-                if (sign === 'positive') return Math.abs(val);
-                if (sign === 'negative') return -Math.abs(val);
-                return randomInt(0, 1) === 0 ? val : -val; // Mixed
-            };
-
-            const formatVal = (v) => v < 0 ? `(${v})` : v;
-
-            switch (topic) {
-                case 'whole_add':
-                case 'int_add': {
-                    const { a, b } = generateNumber(digits, regrouping, '+');
-                    let finalA = topic === 'int_add' ? applySign(a) : a;
-                    let finalB = topic === 'int_add' ? applySign(b) : b;
-                    return {
-                        text: `${formatVal(finalA)} + ${formatVal(finalB)}`,
-                        answer: (finalA + finalB).toString(),
-                        type: 'standard',
-                        displayAnswer: (finalA + finalB).toString()
-                    };
-                }
-                case 'whole_sub':
-                case 'int_sub': {
-                    const { a, b } = generateNumber(digits, regrouping, '-');
-                    let finalA = topic === 'int_sub' ? applySign(a) : a;
-                    let finalB = topic === 'int_sub' ? applySign(b) : b;
-                    return {
-                        text: `${formatVal(finalA)} - ${formatVal(finalB)}`,
-                        answer: (finalA - finalB).toString(),
-                        type: 'standard',
-                        displayAnswer: (finalA - finalB).toString()
-                    };
-                }
-                case 'whole_mul':
-                case 'int_mul': {
-                    let a, b;
-                    if (table === 'mixed') {
-                        const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                        const maxVal = Math.pow(10, digits) - 1;
-                        a = randomInt(minVal, maxVal);
-                        b = randomInt(minVal, maxVal);
-                    } else {
-                        a = parseInt(table);
-                        b = randomInt(1, 12);
-                        if (randomInt(0,1)) { let temp = a; a = b; b = temp; }
-                    }
-                    let finalA = topic === 'int_mul' ? applySign(a) : a;
-                    let finalB = topic === 'int_mul' ? applySign(b) : b;
-                    return {
-                        text: `${formatVal(finalA)} × ${formatVal(finalB)}`,
-                        answer: (finalA * finalB).toString(),
-                        type: 'standard',
-                        displayAnswer: (finalA * finalB).toString()
-                    };
-                }
-                case 'whole_div':
-                case 'int_div': {
-                    let divisor, quotient;
-                    if (table === 'mixed') {
-                        const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                        const maxVal = Math.pow(10, digits) - 1;
-                        divisor = randomInt(minVal, maxVal);
-                        quotient = randomInt(minVal, maxVal);
-                    } else {
-                        divisor = parseInt(table);
-                        quotient = randomInt(1, 12);
-                    }
-                    let finalDivisor = topic === 'int_div' ? applySign(divisor) : divisor;
-                    let finalQuotient = topic === 'int_div' ? applySign(quotient) : quotient;
-                    if(finalDivisor === 0) finalDivisor = 1;
-                    let finalDividend = finalDivisor * finalQuotient;
-
-                    return {
-                        text: `${formatVal(finalDividend)} ÷ ${formatVal(finalDivisor)}`,
-                        answer: finalQuotient.toString(),
-                        type: 'standard',
-                        displayAnswer: finalQuotient.toString()
-                    };
-                }
-                case 'dec_add':
-                case 'dec_sub': {
-                    const op = topic === 'dec_add' ? '+' : '-';
-                    const { a, b } = generateNumber(digits, regrouping, op);
-                    const decPlace = randomInt(1, digits);
-                    const decA = (a / Math.pow(10, decPlace));
-                    const decB = (b / Math.pow(10, decPlace));
-                    
-                    const ans = op === '+' ? (decA + decB) : (decA - decB);
-                    // Handle float precision
-                    const cleanAns = parseFloat(ans.toPrecision(12)).toString();
-
-                    return {
-                        text: `${decA} ${op} ${decB}`,
-                        answer: cleanAns,
-                        type: 'standard',
-                        displayAnswer: cleanAns
-                    };
-                }
-                case 'dec_mul': {
-                    const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                    const maxVal = Math.pow(10, digits) - 1;
-                    const aNum = randomInt(minVal, maxVal);
-                    const bNum = randomInt(minVal, maxVal);
-                    const a = aNum / Math.pow(10, randomInt(1, digits));
-                    const b = bNum / Math.pow(10, randomInt(1, digits));
-                    const ans = parseFloat((a * b).toPrecision(12)).toString();
-                    return {
-                        text: `${a} × ${b}`,
-                        answer: ans,
-                        type: 'standard',
-                        displayAnswer: ans
-                    };
-                }
-                case 'dec_div': {
-                    const minVal = digits === 1 ? 1 : Math.pow(10, digits - 1);
-                    const maxVal = Math.pow(10, digits) - 1;
-                    const divisorNum = randomInt(minVal, maxVal);
-                    const quotientNum = randomInt(minVal, maxVal);
-                    const divisor = divisorNum / Math.pow(10, randomInt(1, digits));
-                    const quotient = quotientNum / Math.pow(10, randomInt(1, digits));
-                    const dividend = parseFloat((divisor * quotient).toPrecision(12));
-                    return {
-                        text: `${dividend} ÷ ${divisor}`,
-                        answer: quotient.toString(),
-                        type: 'standard',
-                        displayAnswer: quotient.toString()
-                    };
-                }
-                case 'frac_add':
-                case 'frac_sub': {
-                    const op = topic === 'frac_add' ? '+' : '-';
-                    let den = randomInt(2, 10);
-                    let num1 = randomInt(1, den * 2);
-                    let num2 = randomInt(1, den * 2);
-                    
-                    if (op === '-' && num2 > num1) { let t = num1; num1 = num2; num2 = t; }
-                    
-                    let ansNum = op === '+' ? num1 + num2 : num1 - num2;
-                    let ansDen = den;
-                    
-                    // Simplify answer
-                    let d = gcd(Math.abs(ansNum), ansDen);
-                    ansNum /= d; ansDen /= d;
-
-                    return {
-                        text: <span className="flex items-center"><FractionDisplay num={num1} den={den} /> {op} <FractionDisplay num={num2} den={den} /></span>,
-                        answer: { num: ansNum.toString(), den: ansDen.toString() },
-                        type: 'fraction',
-                        displayAnswer: <FractionDisplay num={ansNum} den={ansDen} />
-                    };
-                }
-                case 'frac_mul':
-                case 'frac_div': {
-                    const op = topic === 'frac_mul' ? '×' : '÷';
-                    let n1 = randomInt(1, 9), d1 = randomInt(2, 9);
-                    let n2 = randomInt(1, 9), d2 = randomInt(2, 9);
-                    
-                    let ansNum, ansDen;
-                    if (op === '×') {
-                        ansNum = n1 * n2;
-                        ansDen = d1 * d2;
-                    } else {
-                        ansNum = n1 * d2;
-                        ansDen = d1 * n2;
-                    }
-                    
-                    let d = gcd(Math.abs(ansNum), ansDen);
-                    ansNum /= d; ansDen /= d;
-
-                    return {
-                        text: <span className="flex items-center"><FractionDisplay num={n1} den={d1} /> {op} <FractionDisplay num={n2} den={d2} /></span>,
-                        answer: { num: ansNum.toString(), den: ansDen.toString() },
-                        type: 'fraction',
-                        displayAnswer: <FractionDisplay num={ansNum} den={ansDen} />
-                    };
-                }
-                case 'frac_simplify': {
-                    let mult = randomInt(2, 6);
-                    let ansNum = randomInt(1, 5);
-                    let ansDen = randomInt(ansNum + 1, 9); // Proper fraction
-                    let startNum = ansNum * mult;
-                    let startDen = ansDen * mult;
-
-                    return {
-                        text: <span className="flex items-center">Simplify: <FractionDisplay num={startNum} den={startDen} /></span>,
-                        answer: { num: ansNum.toString(), den: ansDen.toString() },
-                        type: 'fraction',
-                        displayAnswer: <FractionDisplay num={ansNum} den={ansDen} />
-                    };
-                }
-                case 'percentages': {
-                    const type = randomInt(0, 2); // 0: find val, 1: find rate, 2: find base
-                    let base = randomInt(2, 20) * 10; // 20 to 200
-                    let rate = randomInt(1, 19) * 5; // 5% to 95%
-                    let val = (base * rate) / 100;
-
-                    if (type === 0) {
-                        return { text: `What is ${rate}% of ${base}?`, answer: val.toString(), type: 'standard', displayAnswer: val.toString() };
-                    } else if (type === 1) {
-                        return { text: `${val} is what percent of ${base}?`, answer: rate.toString(), type: 'standard', displayAnswer: `${rate}%` };
-                    } else {
-                        return { text: `${val} is ${rate}% of what number?`, answer: base.toString(), type: 'standard', displayAnswer: base.toString() };
-                    }
-                }
-                case 'exponents': {
-                    let base = randomInt(2, 9);
-                    let power = randomInt(0, 3);
-                    let ans = Math.pow(base, power);
-                    return {
-                        text: <span>Evaluate: {base}<sup>{power}</sup></span>,
-                        answer: ans.toString(),
-                        type: 'standard',
-                        displayAnswer: ans.toString()
-                    };
-                }
-                case 'laws_exp': {
-                    const ops = ['mul', 'div', 'pow'];
-                    const op = ops[randomInt(0, 2)];
-                    let p1 = randomInt(2, 6);
-                    let p2 = randomInt(1, p1-1); // ensure positive division results
-                    
-                    if (op === 'mul') {
-                        return {
-                            text: <span>Simplify: x<sup>{p1}</sup> × x<sup>{p2}</sup></span>,
-                            answer: (p1 + p2).toString(),
-                            type: 'expression',
-                            prefix: 'x^',
-                            displayAnswer: <span>x<sup>{p1+p2}</sup></span>
-                        };
-                    } else if (op === 'div') {
-                        return {
-                            text: <span>Simplify: x<sup>{p1}</sup> ÷ x<sup>{p2}</sup></span>,
-                            answer: (p1 - p2).toString(),
-                            type: 'expression',
-                            prefix: 'x^',
-                            displayAnswer: <span>x<sup>{p1-p2}</sup></span>
-                        };
-                    } else {
-                        return {
-                            text: <span>Simplify: (x<sup>{p1}</sup>)<sup>{p2}</sup></span>,
-                            answer: (p1 * p2).toString(),
-                            type: 'expression',
-                            prefix: 'x^',
-                            displayAnswer: <span>x<sup>{p1*p2}</sup></span>
-                        };
-                    }
-                }
+const generateQuestions = (category, operation, config, numQuestions) => {
+    const questions = [];
+    for (let i = 0; i < numQuestions; i++) {
+        try {
+            switch (category) {
+                case 'whole':
+                    questions.push(generateWholeOrIntegerQuestion(operation, config, false)); break;
+                case 'integers':
+                    questions.push(generateWholeOrIntegerQuestion(operation, config, true)); break;
+                case 'decimals':
+                    questions.push(generateDecimalQuestion(operation, config)); break;
+                case 'fractions':
+                    questions.push(generateFractionQuestion(operation, config)); break;
+                case 'percentages':
+                    questions.push(generatePercentageQuestion()); break;
+                case 'exponents':
+                    questions.push(generateExponentQuestion()); break;
+                case 'simplify':
+                    questions.push(generateSimplifyFractionQuestion()); break;
                 default:
-                    return { text: '1 + 1', answer: '2', type: 'standard', displayAnswer: '2' };
+                    questions.push({ type: 'standard', display: 'Error', correctAnswer: '0' });
             }
-        };
+        } catch (e) {
+            console.error("Error generating question", e);
+            i--; // Retry
+        }
+    }
+    return questions;
+};
 
-        const CATEGORIES = [
-            { id: 'whole_add', label: 'Whole Numbers: Addition', group: 'Whole Numbers' },
-            { id: 'whole_sub', label: 'Whole Numbers: Subtraction', group: 'Whole Numbers' },
-            { id: 'whole_mul', label: 'Whole Numbers: Multiplication', group: 'Whole Numbers' },
-            { id: 'whole_div', label: 'Whole Numbers: Division', group: 'Whole Numbers' },
-            { id: 'whole_mixed', label: 'Whole Numbers: Mixed Operations', group: 'Whole Numbers' },
-            { id: 'dec_add', label: 'Decimals: Addition', group: 'Decimals' },
-            { id: 'dec_sub', label: 'Decimals: Subtraction', group: 'Decimals' },
-            { id: 'dec_mul', label: 'Decimals: Multiplication', group: 'Decimals' },
-            { id: 'dec_div', label: 'Decimals: Division', group: 'Decimals' },
-            { id: 'dec_mixed', label: 'Decimals: Mixed Operations', group: 'Decimals' },
-            { id: 'frac_add', label: 'Fractions: Addition', group: 'Fractions' },
-            { id: 'frac_sub', label: 'Fractions: Subtraction', group: 'Fractions' },
-            { id: 'frac_mul', label: 'Fractions: Multiplication', group: 'Fractions' },
-            { id: 'frac_div', label: 'Fractions: Division', group: 'Fractions' },
-            { id: 'frac_mixed', label: 'Fractions: Mixed Operations', group: 'Fractions' },
-            { id: 'frac_simplify', label: 'Fractions: Simplify', group: 'Fractions' },
-            { id: 'int_add', label: 'Integers: Addition', group: 'Integers' },
-            { id: 'int_sub', label: 'Integers: Subtraction', group: 'Integers' },
-            { id: 'int_mul', label: 'Integers: Multiplication', group: 'Integers' },
-            { id: 'int_div', label: 'Integers: Division', group: 'Integers' },
-            { id: 'int_mixed', label: 'Integers: Mixed Operations', group: 'Integers' },
-            { id: 'percentages', label: 'Percentages (Base, Rate, Value)', group: 'Advanced' },
-            { id: 'exponents', label: 'Exponents', group: 'Advanced' },
-            { id: 'laws_exp', label: 'Laws of Exponents', group: 'Advanced' },
-        ];
+// --- Main Application Component ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [appState, setAppState] = useState('HOME'); // HOME, CONFIG, PRACTICE, RESULT, ADMIN_LOGIN, ADMIN
+  const [playerName, setPlayerName] = useState('');
+  
+  // Practice Config State
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedOperation, setSelectedOperation] = useState('add');
+  const [config, setConfig] = useState({ digits: 2, regrouping: 'mixed', table: 'any', signs: 'both', numQuestions: 5 });
+  
+  // Active Practice State
+  const [questions, setQuestions] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  const [attempts, setAttempts] = useState(0);
+  
+  // Input states
+  const [standardInput, setStandardInput] = useState('');
+  const [fracNumInput, setFracNumInput] = useState('');
+  const [fracDenInput, setFracDenInput] = useState('');
+  
+  const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error' | 'info', msg: string }
+  const [adminPassword, setAdminPassword] = useState('');
+  const [leaderboard, setLeaderboard] = useState([]);
 
+  useEffect(() => {
+    if (!auth) return;
+    
+    const initAuth = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await auth.signInWithCustomToken(__initial_auth_token);
+          } else {
+            await auth.signInAnonymously();
+          }
+        } catch (err) {
+          console.error("Auth error:", err);
+        }
+    };
+    
+    initAuth();
+    
+    const unsubscribe = auth.onAuthStateChanged((u) => {
+      setUser(u);
+    });
+    
+    return () => unsubscribe();
+  }, []);
 
-        const App = () => {
-            const [screen, setScreen] = useState('home'); // home, settings, quiz, results, admin_login, admin_dashboard
-            const [userName, setUserName] = useState('');
-            const [topic, setTopic] = useState(null);
-            const [authReady, setAuthReady] = useState(false);
-            const [errorMsg, setErrorMsg] = useState('');
+  // Fetch Leaderboard for Admin
+  useEffect(() => {
+      if (appState === 'ADMIN' && user && db) {
+          const scoresRef = db.collection(`artifacts/${appId}/public/data/math_scores`);
+          
+          const unsubscribe = scoresRef.onSnapshot((snapshot) => {
+              const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              // Sort descending by date locally
+              data.sort((a, b) => new Date(b.date) - new Date(a.date));
+              setLeaderboard(data);
+          }, (error) => console.error("Error fetching scores:", error));
+          
+          return () => unsubscribe();
+      }
+  }, [appState, user]);
 
-            // Settings State
-            const [settings, setSettings] = useState({
-                numQuestions: 10,
-                digits: 2,
-                regrouping: 'mixed',
-                sign: 'mixed',
-                table: 'mixed'
-            });
+  const handleStartConfig = (category) => {
+      if (!playerName.trim()) {
+          setFeedback({ type: 'error', msg: 'Please enter your name to start.' });
+          setTimeout(() => setFeedback(null), 3000);
+          return;
+      }
+      setSelectedCategory(category);
+      // Reset config defaults based on category
+      if (category === 'whole' || category === 'integers') setConfig(prev => ({...prev, digits: 2, regrouping: 'mixed', table: 'any', signs: 'both'}));
+      if (category === 'decimals') setConfig(prev => ({...prev, digitsBefore: 1, digitsAfter: 1}));
+      
+      setAppState('CONFIG');
+  };
 
-            // Quiz State
-            const [questions, setQuestions] = useState([]);
-            const [currentIndex, setCurrentIndex] = useState(0);
-            const [score, setScore] = useState(0);
-            const [currentTries, setCurrentTries] = useState(0);
-            const [quizStatus, setQuizStatus] = useState('playing'); // playing, wrong, failed, success
-            
-            // User Inputs
-            const [stdInput, setStdInput] = useState('');
-            const [fracInput, setFracInput] = useState({ num: '', den: '' });
+  const handleStartPractice = () => {
+      const generated = generateQuestions(selectedCategory, selectedOperation, config, config.numQuestions);
+      setQuestions(generated);
+      setCurrentIndex(0);
+      setScore(0);
+      setAttempts(0);
+      setFeedback(null);
+      clearInputs();
+      setAppState('PRACTICE');
+  };
 
-            // Admin State
-            const [adminPass, setAdminPass] = useState('');
-            const [adminData, setAdminData] = useState([]);
-            const [adminLoading, setAdminLoading] = useState(false);
+  const clearInputs = () => {
+      setStandardInput('');
+      setFracNumInput('');
+      setFracDenInput('');
+  };
 
-            useEffect(() => {
-                const initAuth = async () => {
-                    try {
-                        const { auth, signInAnonymously, signInWithCustomToken, initialAuthToken } = window.FirebaseApp;
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                        setAuthReady(true);
-                    } catch (error) {
-                        console.error("Auth error:", error);
-                        setErrorMsg("Could not connect to database. Progress won't be saved.");
-                        setAuthReady(true); // Let them play anyway
-                    }
-                };
-                initAuth();
-            }, []);
+  const handleAnswerSubmit = () => {
+      if (!questions[currentIndex]) return;
+      const q = questions[currentIndex];
+      let isCorrect = false;
+      let actualAnswerStr = '';
 
-            const startSettings = (selectedTopic) => {
-                if (!userName.trim()) {
-                    setErrorMsg("Please enter your name first.");
-                    setTimeout(() => setErrorMsg(''), 3000);
-                    return;
-                }
-                setTopic(selectedTopic);
-                // Reset defaults based on topic
-                let defaultDigits = 2;
-                if (selectedTopic.id && selectedTopic.id.includes('dec')) defaultDigits = 1; // Ensure we read .id properly to avoid crash
-                setSettings({ ...settings, digits: defaultDigits, regrouping: 'mixed', sign: 'mixed', table: 'mixed', numQuestions: 10 });
-                setScreen('settings');
-            };
+      if (q.type === 'standard') {
+          isCorrect = standardInput.trim() === q.correctAnswer;
+          actualAnswerStr = q.correctAnswer;
+      } else if (q.type === 'fraction_op' || q.type === 'fraction_simplify') {
+          // Allow just typing numerator if it's a whole number result
+          if (q.isWhole && fracDenInput === '') {
+             isCorrect = fracNumInput.trim() === q.correctNum;
+             actualAnswerStr = q.correctNum;
+          } else {
+             isCorrect = fracNumInput.trim() === q.correctNum && fracDenInput.trim() === q.correctDen;
+             actualAnswerStr = `${q.correctNum} / ${q.correctDen}`;
+          }
+      }
 
-            const startQuiz = () => {
-                const generated = [];
-                for (let i = 0; i < settings.numQuestions; i++) {
-                    generated.push(generateQuestion(topic.id, settings));
-                }
-                setQuestions(generated);
-                setCurrentIndex(0);
-                setScore(0);
-                setCurrentTries(0);
-                setQuizStatus('playing');
-                resetInputs();
-                setScreen('quiz');
-            };
+      if (isCorrect) {
+          setScore(s => s + 1);
+          setFeedback({ type: 'success', msg: 'Correct!' });
+          setTimeout(nextQuestion, 1000);
+      } else {
+          const newAttempts = attempts + 1;
+          setAttempts(newAttempts);
+          if (newAttempts >= 2) {
+              setFeedback({ type: 'info', msg: `Incorrect. The correct answer was: ${actualAnswerStr}` });
+              setTimeout(nextQuestion, 2500);
+          } else {
+              setFeedback({ type: 'error', msg: 'Incorrect, try again! (1 attempt left)' });
+          }
+      }
+  };
 
-            const resetInputs = () => {
-                setStdInput('');
-                setFracInput({ num: '', den: '' });
-            };
+  const nextQuestion = () => {
+      if (currentIndex + 1 < questions.length) {
+          setCurrentIndex(i => i + 1);
+          setAttempts(0);
+          setFeedback(null);
+          clearInputs();
+      } else {
+          finishPractice();
+      }
+  };
 
-            const cancelQuiz = () => {
-                if(confirm("Are you sure you want to cancel? Your progress will be lost.")) {
-                    setScreen('home');
-                }
-            };
+  const finishPractice = async () => {
+      setAppState('RESULT');
+      // Save to Firebase
+      if (user && db) {
+          try {
+              const scoresRef = db.collection(`artifacts/${appId}/public/data/math_scores`);
+              await scoresRef.add({
+                  playerName,
+                  category: selectedCategory,
+                  operation: selectedOperation,
+                  score,
+                  total: questions.length,
+                  date: new Date().toISOString()
+              });
+          } catch (error) {
+              console.error("Error saving score", error);
+          }
+      }
+  };
 
-            const checkAnswer = () => {
-                const q = questions[currentIndex];
-                let isCorrect = false;
+  const renderFractionDisplay = (num, den) => (
+      <div className="inline-flex flex-col items-center justify-center align-middle mx-2 text-xl font-bold">
+          <span className="border-b-2 border-slate-700 px-1 leading-tight">{num}</span>
+          <span className="px-1 leading-tight">{den}</span>
+      </div>
+  );
 
-                if (q.type === 'standard' || q.type === 'expression') {
-                    // Tolerant to extra spaces, case insensitive
-                    isCorrect = stdInput.trim().toLowerCase() === q.answer.toString().toLowerCase();
-                } else if (q.type === 'fraction') {
-                    // Note: for fractions we require exact simplified match based on generator
-                    // but we can allow 2/-3 == -2/3. For simplicity, match strictly what's generated.
-                    // Wait, sometimes generator output might be num:1, den:1. Let's allow simple matches.
-                    const inNum = parseInt(fracInput.num);
-                    const inDen = parseInt(fracInput.den) || 1;
-                    const ansNum = parseInt(q.answer.num);
-                    const ansDen = parseInt(q.answer.den);
+  const renderQuestion = () => {
+      if (!questions[currentIndex]) return null;
+      const q = questions[currentIndex];
 
-                    // Cross multiply check for equivalence AND check if simplified if it's simplify category
-                    if (topic.id === 'frac_simplify') {
-                         isCorrect = (inNum === ansNum && inDen === ansDen);
-                    } else {
-                         // General fraction equivalence 
-                         if (inDen !== 0 && (inNum * ansDen === ansNum * inDen)) {
-                            isCorrect = true;
-                         }
-                    }
-                }
+      return (
+          <div className="flex flex-col items-center justify-center space-y-6 my-8">
+              <h2 className="text-3xl font-bold text-slate-800 flex items-center">
+                  {q.type === 'standard' && q.display}
+                  {q.type === 'fraction_op' && (
+                      <div className="flex items-center">
+                          {renderFractionDisplay(q.f1.n, q.f1.d)}
+                          <span className="mx-2">{q.opSymbol}</span>
+                          {renderFractionDisplay(q.f2.n, q.f2.d)}
+                          <span className="mx-2">=</span>
+                      </div>
+                  )}
+                  {q.type === 'fraction_simplify' && (
+                      <div className="flex items-center">
+                          <span>Simplify: </span>
+                          {renderFractionDisplay(q.displayNum, q.displayDen)}
+                          <span className="mx-2">=</span>
+                      </div>
+                  )}
+              </h2>
 
-                if (isCorrect) {
-                    setQuizStatus('success');
-                    if (currentTries === 0) {
-                        setScore(score + 1);
-                    }
-                } else {
-                    const newTries = currentTries + 1;
-                    setCurrentTries(newTries);
-                    if (newTries >= 2) {
-                        setQuizStatus('failed');
-                    } else {
-                        setQuizStatus('wrong');
-                    }
-                }
-            };
+              <div className="flex items-center justify-center w-full max-w-xs">
+                  {q.type === 'standard' && (
+                      <input 
+                          type="number" 
+                          value={standardInput}
+                          onChange={(e) => setStandardInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAnswerSubmit()}
+                          className="w-full text-center text-2xl p-3 border-2 border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none transition-colors shadow-sm"
+                          placeholder="?"
+                          autoFocus
+                      />
+                  )}
+                  {(q.type === 'fraction_op' || q.type === 'fraction_simplify') && (
+                      <div className="flex flex-col items-center space-y-2 bg-slate-50 p-4 rounded-xl border-2 border-slate-200 shadow-sm">
+                          <input 
+                              type="number" 
+                              value={fracNumInput}
+                              onChange={(e) => setFracNumInput(e.target.value)}
+                              className="w-20 text-center text-xl p-2 border-2 border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
+                              placeholder="Num"
+                              autoFocus
+                          />
+                          <div className="w-24 h-0.5 bg-slate-800"></div>
+                          <input 
+                              type="number" 
+                              value={fracDenInput}
+                              onChange={(e) => setFracDenInput(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleAnswerSubmit()}
+                              className="w-20 text-center text-xl p-2 border-2 border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
+                              placeholder="Den"
+                          />
+                      </div>
+                  )}
+              </div>
 
-            const nextQuestion = () => {
-                if (currentIndex + 1 < questions.length) {
-                    setCurrentIndex(currentIndex + 1);
-                    setCurrentTries(0);
-                    setQuizStatus('playing');
-                    resetInputs();
-                } else {
-                    finishQuiz();
-                }
-            };
+              <button 
+                  onClick={handleAnswerSubmit}
+                  disabled={!!feedback && feedback.type !== 'error'} // Disable while showing correct/info feedback
+                  className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full shadow-lg transform transition active:scale-95 disabled:opacity-50"
+              >
+                  Submit Answer
+              </button>
 
-            const finishQuiz = async () => {
-                setScreen('results');
-                
-                const finalScore = (quizStatus === 'success' && currentTries === 0 && currentIndex === questions.length-1) ? score + 1 : score;
-                
-                // Save to Firestore
-                const { db, auth, appId, collection, addDoc } = window.FirebaseApp;
-                if (auth && auth.currentUser) {
-                    try {
-                        const path = collection(db, 'artifacts', appId, 'public', 'data', 'math_scores');
-                        await addDoc(path, {
-                            name: userName,
-                            topic: topic.label,
-                            score: finalScore,
-                            total: questions.length,
-                            timestamp: new Date().toISOString()
-                        });
-                    } catch (e) {
-                        console.error("Failed to save score:", e);
-                    }
-                }
+              {/* Feedback Alert */}
+              {feedback && (
+                  <div className={`flex items-center p-4 rounded-lg animate-in fade-in slide-in-from-bottom-2 ${
+                      feedback.type === 'success' ? 'bg-green-100 text-green-800' :
+                      feedback.type === 'error' ? 'bg-red-100 text-red-800' :
+                      'bg-blue-100 text-blue-800'
+                  }`}>
+                      {feedback.type === 'success' && <CheckCircle2 className="w-6 h-6 mr-2" />}
+                      {feedback.type === 'error' && <XCircle className="w-6 h-6 mr-2" />}
+                      {feedback.type === 'info' && <Settings className="w-6 h-6 mr-2" />}
+                      <span className="font-semibold">{feedback.msg}</span>
+                  </div>
+              )}
+          </div>
+      );
+  };
 
-                // Save to Google Apps Script (if deployed as Web App)
-                if (typeof google !== 'undefined' && google.script && google.script.run) {
-                    google.script.run.withFailureHandler(console.error).saveScoreToSheet({
-                        name: userName,
-                        topic: topic.label,
-                        score: finalScore,
-                        total: questions.length,
-                        timestamp: new Date().toISOString()
-                    });
-                }
-            };
+  const renderConfigurator = () => (
+      <div className="w-full max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-xl">
+          <div className="flex items-center justify-between mb-8 border-b pb-4">
+              <h2 className="text-2xl font-bold text-slate-800 capitalize flex items-center">
+                  <Settings className="w-6 h-6 mr-2 text-blue-500" />
+                  Configure {selectedCategory} Practice
+              </h2>
+              <button onClick={() => setAppState('HOME')} className="text-slate-500 hover:text-slate-800 flex items-center text-sm font-medium">
+                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </button>
+          </div>
 
-            const handleAdminLogin = (e) => {
-                e.preventDefault();
-                if (adminPass === 'Admin1') {
-                    setScreen('admin_dashboard');
-                    setAdminPass('');
-                    fetchAdminData();
-                } else {
-                    alert("Incorrect Password");
-                }
-            };
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Operations (for basic types) */}
+              {['whole', 'integers', 'decimals', 'fractions'].includes(selectedCategory) && (
+                  <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-slate-700 uppercase tracking-wider">Operation</label>
+                      <div className="grid grid-cols-2 gap-2">
+                          {['add', 'sub', 'mul', 'div'].map(op => (
+                              <button 
+                                  key={op}
+                                  onClick={() => setSelectedOperation(op)}
+                                  className={`p-3 rounded-lg border-2 font-semibold transition-all ${selectedOperation === op ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                              >
+                                  {op === 'add' ? 'Addition (+)' : op === 'sub' ? 'Subtraction (-)' : op === 'mul' ? 'Multiplication (×)' : 'Division (÷)'}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              )}
 
-            const fetchAdminData = async () => {
-                setAdminLoading(true);
-                const { db, auth, appId, collection, getDocs } = window.FirebaseApp;
-                if (!auth.currentUser) {
-                    setAdminLoading(false);
-                    return;
-                }
-                try {
-                    const path = collection(db, 'artifacts', appId, 'public', 'data', 'math_scores');
-                    const snapshot = await getDocs(path);
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    // Sort descending by timestamp in memory (Rule 2)
-                    data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                    setAdminData(data);
-                } catch (e) {
-                    console.error("Admin fetch error", e);
-                }
-                setAdminLoading(false);
-            };
+              {/* Specific Settings based on Category & Operation */}
+              <div className="space-y-6">
+                  {/* Digits for Whole/Integers (+/-) */}
+                  {['whole', 'integers'].includes(selectedCategory) && ['add', 'sub'].includes(selectedOperation) && (
+                      <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-slate-700">Number of Digits</label>
+                          <input type="range" min="1" max="4" value={config.digits} onChange={(e) => setConfig({...config, digits: e.target.value})} className="w-full accent-blue-600" />
+                          <div className="text-center font-bold text-slate-600">{config.digits} Digit(s)</div>
+                      </div>
+                  )}
 
-            if (screen === 'home') {
-                // Group categories
-                const groups = CATEGORIES.reduce((acc, cat) => {
-                    if (!acc[cat.group]) acc[cat.group] = [];
-                    acc[cat.group].push(cat);
-                    return acc;
-                }, {});
+                  {/* Regrouping for Whole/Integers (+/-) */}
+                  {['whole', 'integers'].includes(selectedCategory) && ['add', 'sub'].includes(selectedOperation) && (
+                      <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-slate-700">Regrouping (Borrowing/Carrying)</label>
+                          <select value={config.regrouping} onChange={(e) => setConfig({...config, regrouping: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg bg-slate-50">
+                              <option value="mixed">Mixed</option>
+                              <option value="yes">Always</option>
+                              <option value="no">Never</option>
+                          </select>
+                      </div>
+                  )}
 
-                return (
-                    <div className="min-h-screen bg-gray-100 flex flex-col items-center py-10 px-4">
-                        <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden relative">
-                            <button onClick={() => setScreen('admin_login')} className="absolute top-4 right-4 text-xs font-semibold text-gray-400 hover:text-gray-800 transition">Admin Panel</button>
-                            
-                            <div className="bg-blue-600 p-8 text-center text-white">
-                                <h1 className="text-3xl md:text-4xl font-bold mb-2">Math Practice Pro</h1>
-                                <p className="text-blue-100">Master your math skills step by step.</p>
-                            </div>
+                  {/* Tables for Whole/Integers (* / /) */}
+                  {['whole', 'integers'].includes(selectedCategory) && ['mul', 'div'].includes(selectedOperation) && (
+                      <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-slate-700">Specific Table (1-12 or Any)</label>
+                          <select value={config.table} onChange={(e) => setConfig({...config, table: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg bg-slate-50">
+                              <option value="any">Any (1-12)</option>
+                              {[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>Table of {i+1}</option>)}
+                          </select>
+                      </div>
+                  )}
 
-                            <div className="p-8">
-                                <div className="mb-8 max-w-md mx-auto">
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Student Name</label>
-                                    <input 
-                                        type="text" 
-                                        value={userName}
-                                        onChange={(e) => setUserName(e.target.value)}
-                                        placeholder="Enter your name to start..."
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm transition"
-                                    />
-                                    {errorMsg && <p className="text-red-500 text-sm mt-2 font-medium">{errorMsg}</p>}
-                                </div>
+                  {/* Signs for Integers */}
+                  {selectedCategory === 'integers' && (
+                      <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-slate-700">Signs</label>
+                          <select value={config.signs} onChange={(e) => setConfig({...config, signs: e.target.value})} className="w-full p-2 border border-slate-300 rounded-lg bg-slate-50">
+                              <option value="both">Both (Mixed)</option>
+                              <option value="positive">Positive Only</option>
+                              <option value="negative">Negative Only</option>
+                          </select>
+                      </div>
+                  )}
 
-                                <h2 className="text-xl font-bold text-gray-800 mb-6 text-center border-b pb-2">Select a Topic</h2>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {Object.entries(groups).map(([groupName, cats]) => (
-                                        <div key={groupName} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                                            <h3 className="font-bold text-gray-700 mb-3 text-sm uppercase tracking-wider">{groupName}</h3>
-                                            <div className="space-y-2">
-                                                {cats.map(c => (
-                                                    <button 
-                                                        key={c.id} 
-                                                        onClick={() => startSettings(c)}
-                                                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-100 hover:text-blue-800 transition text-sm font-medium text-gray-600 bg-white shadow-sm border border-gray-100"
-                                                    >
-                                                        {c.label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+                  {/* Number of Questions (Universal) */}
+                  <div className="space-y-2 pt-4 border-t">
+                      <label className="block text-sm font-semibold text-slate-700">Total Questions</label>
+                      <div className="flex gap-2">
+                          {[5, 10, 15, 20].map(n => (
+                              <button 
+                                  key={n}
+                                  onClick={() => setConfig({...config, numQuestions: n})}
+                                  className={`flex-1 py-2 rounded-lg border font-semibold ${config.numQuestions === n ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                              >
+                                  {n}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+          </div>
 
-            if (screen === 'settings') {
-                return (
-                    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-                        <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-8">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">{topic.label} Settings</h2>
-                            
-                            <div className="space-y-5">
-                                {/* Number of Questions */}
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Number of Questions</label>
-                                    <select 
-                                        value={settings.numQuestions}
-                                        onChange={e => setSettings({...settings, numQuestions: parseInt(e.target.value)})}
-                                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                    >
-                                        <option value="5">5</option>
-                                        <option value="10">10</option>
-                                        <option value="15">15</option>
-                                        <option value="20">20</option>
-                                        <option value="30">30</option>
-                                    </select>
-                                </div>
+          <div className="mt-10 flex justify-center">
+              <button 
+                  onClick={handleStartPractice}
+                  className="px-10 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-full shadow-lg hover:shadow-xl hover:scale-105 transform transition flex items-center text-lg"
+              >
+                  <Play className="w-6 h-6 mr-2 fill-current" />
+                  Start Practice Session
+              </button>
+          </div>
+      </div>
+  );
 
-                                {/* Digits (for whole numbers, decimals, integers) */}
-                                {(topic.id.includes('whole_') || topic.id.includes('dec_') || topic.id.includes('int_')) && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Number of Digits</label>
-                                        <select 
-                                            value={settings.digits}
-                                            onChange={e => setSettings({...settings, digits: parseInt(e.target.value)})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
-                                            <option value="1">1 Digit</option>
-                                            <option value="2">2 Digits</option>
-                                            <option value="3">3 Digits</option>
-                                            <option value="4">4 Digits</option>
-                                        </select>
-                                    </div>
-                                )}
+  return (
+      <div className="min-h-screen bg-slate-100 text-slate-900 font-sans selection:bg-blue-200">
+          {/* Header */}
+          <header className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+              <div className="flex items-center gap-2" onClick={() => setAppState('HOME')} role="button" tabIndex={0}>
+                  <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-inner">
+                      <span className="text-white font-black text-xl font-serif">M</span>
+                  </div>
+                  <h1 className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 hidden sm:block">
+                      MathPractice Pro
+                  </h1>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                  {appState !== 'ADMIN_LOGIN' && appState !== 'ADMIN' && (
+                      <button onClick={() => setAppState('ADMIN_LOGIN')} className="p-2 text-slate-400 hover:text-slate-700 transition-colors" title="Admin Access">
+                          <ShieldAlert className="w-5 h-5" />
+                      </button>
+                  )}
+                  <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full border border-slate-200">
+                      <UserCircle className="w-5 h-5 text-slate-500" />
+                      <input 
+                          type="text" 
+                          placeholder="Enter your name..." 
+                          value={playerName}
+                          onChange={(e) => setPlayerName(e.target.value)}
+                          disabled={appState === 'PRACTICE'}
+                          className="bg-transparent border-none focus:outline-none w-32 sm:w-48 text-sm font-semibold placeholder-slate-400 disabled:opacity-50"
+                      />
+                  </div>
+              </div>
+          </header>
 
-                                {/* Regrouping (for addition/subtraction of whole/dec/int) */}
-                                {/(whole|dec|int)_(add|sub|mixed)/.test(topic.id) && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Regrouping (Borrowing/Carrying)</label>
-                                        <select 
-                                            value={settings.regrouping}
-                                            onChange={e => setSettings({...settings, regrouping: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
-                                            <option value="mixed">Mixed (Random)</option>
-                                            <option value="no">Without Regrouping</option>
-                                            <option value="yes">With Regrouping</option>
-                                        </select>
-                                    </div>
-                                )}
+          <main className="container mx-auto px-4 py-8 max-w-5xl">
+              {/* Optional Name Feedback */}
+              {feedback && appState === 'HOME' && (
+                   <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg text-center font-medium animate-pulse">
+                       {feedback.msg}
+                   </div>
+              )}
 
-                                {/* Sign (for integers) */}
-                                {topic.id.includes('int_') && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Signs Included</label>
-                                        <select 
-                                            value={settings.sign}
-                                            onChange={e => setSettings({...settings, sign: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
-                                            <option value="mixed">Both Positive & Negative</option>
-                                            <option value="positive">Positive Only</option>
-                                            <option value="negative">Negative Only</option>
-                                        </select>
-                                    </div>
-                                )}
+              {/* View: HOME */}
+              {appState === 'HOME' && (
+                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                      <div className="text-center space-y-4 mb-12">
+                          <h2 className="text-4xl md:text-5xl font-extrabold text-slate-800 tracking-tight">Master Your Math Skills</h2>
+                          <p className="text-lg text-slate-600 max-w-2xl mx-auto">Choose a category below to start generating custom practice problems. Enter your name in the top right to save your scores!</p>
+                      </div>
 
-                                {/* Tables (for multiplication/division of whole/integers) */}
-                                {/(whole|int)_(mul|div|mixed)/.test(topic.id) && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Times Tables (1-12)</label>
-                                        <select 
-                                            value={settings.table}
-                                            onChange={e => setSettings({...settings, table: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                        >
-                                            <option value="mixed">Mixed</option>
-                                            {[...Array(12)].map((_, i) => (
-                                                <option key={i+1} value={i+1}>Table of {i+1}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
-                            </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {[
+                              { id: 'whole', title: 'Whole Numbers', desc: 'Basic arithmetic with non-negative numbers.', color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' },
+                              { id: 'integers', title: 'Integers', desc: 'Operations including positive and negative numbers.', color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100' },
+                              { id: 'decimals', title: 'Decimals', desc: 'Practice with decimal points and precision.', color: 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100' },
+                              { id: 'fractions', title: 'Fractions', desc: 'Add, subtract, multiply and divide fractions.', color: 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' },
+                              { id: 'percentages', title: 'Percentages', desc: 'Find base, rate, or percentage value.', color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
+                              { id: 'exponents', title: 'Exponents', desc: 'Evaluate powers and basic laws.', color: 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100' },
+                              { id: 'simplify', title: 'Simplify Fractions', desc: 'Reduce fractions to their lowest terms.', color: 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100' }
+                          ].map(cat => (
+                              <button 
+                                  key={cat.id}
+                                  onClick={() => handleStartConfig(cat.id)}
+                                  className={`p-6 rounded-2xl border-2 text-left transition-all transform hover:-translate-y-1 hover:shadow-md ${cat.color}`}
+                              >
+                                  <h3 className="text-xl font-bold mb-2">{cat.title}</h3>
+                                  <p className="text-sm opacity-80 font-medium">{cat.desc}</p>
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              )}
 
-                            <div className="flex gap-4 mt-8">
-                                <button onClick={() => setScreen('home')} className="flex-1 py-3 bg-gray-200 text-gray-800 rounded-lg font-bold hover:bg-gray-300 transition">Back</button>
-                                <button onClick={startQuiz} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">Start Practice</button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+              {/* View: CONFIG */}
+              {appState === 'CONFIG' && renderConfigurator()}
 
-            if (screen === 'quiz') {
-                const q = questions[currentIndex];
-                const isFinished = quizStatus === 'success' || quizStatus === 'failed';
+              {/* View: PRACTICE */}
+              {appState === 'PRACTICE' && (
+                  <div className="max-w-3xl mx-auto bg-white p-8 rounded-3xl shadow-2xl relative overflow-hidden animate-in zoom-in-95">
+                      {/* Top Bar inside Practice */}
+                      <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-100">
+                          <div className="text-slate-500 font-bold uppercase tracking-wider text-sm flex items-center">
+                              <span className="w-2 h-2 rounded-full bg-blue-500 mr-2 animate-pulse"></span>
+                              Question {currentIndex + 1} of {questions.length}
+                          </div>
+                          <button 
+                              onClick={() => { if(window.confirm('Are you sure you want to cancel this session?')) setAppState('HOME') }}
+                              className="text-red-400 hover:text-red-600 font-semibold text-sm transition-colors"
+                          >
+                              Cancel Session
+                          </button>
+                      </div>
 
-                return (
-                    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-                        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col min-h-[400px]">
-                            
-                            {/* Header */}
-                            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                                <div className="text-gray-500 font-semibold text-sm">Question {currentIndex + 1} of {questions.length}</div>
-                                <button onClick={cancelQuiz} className="text-red-500 hover:text-red-700 font-semibold text-sm transition">Cancel</button>
-                            </div>
+                      {/* Progress Bar */}
+                      <div className="w-full h-2 bg-slate-100 rounded-full mb-10 overflow-hidden">
+                          <div 
+                              className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 transition-all duration-500 ease-out"
+                              style={{ width: `${(currentIndex / questions.length) * 100}%` }}
+                          ></div>
+                      </div>
 
-                            {/* Main Content Area */}
-                            <div className="flex-1 p-8 flex flex-col items-center justify-center">
-                                <h2 className="text-4xl font-bold text-gray-800 mb-10 flex items-center justify-center text-center">
-                                    {q.text} <span className="mx-4">=</span> ?
-                                </h2>
+                      {renderQuestion()}
 
-                                {/* Input Area */}
-                                <div className="mb-8 w-full flex justify-center">
-                                    {q.type === 'standard' && (
-                                        <input 
-                                            type="text" 
-                                            value={stdInput}
-                                            onChange={e => setStdInput(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                            disabled={isFinished}
-                                            className="text-center text-3xl w-48 px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none transition shadow-inner"
-                                            autoFocus
-                                        />
-                                    )}
-                                    
-                                    {q.type === 'expression' && (
-                                        <div className="flex items-center text-3xl font-bold">
-                                            <span className="mr-1">x</span><sup className="mt-[-20px]">
-                                                <input 
-                                                    type="text" 
-                                                    value={stdInput}
-                                                    onChange={e => setStdInput(e.target.value)}
-                                                    onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                                    disabled={isFinished}
-                                                    className="text-center w-16 px-1 py-1 border-2 border-gray-300 rounded focus:border-blue-500 focus:outline-none text-xl shadow-inner"
-                                                    autoFocus
-                                                />
-                                            </sup>
-                                        </div>
-                                    )}
+                  </div>
+              )}
 
-                                    {q.type === 'fraction' && (
-                                        <div className="flex flex-col items-center gap-2">
-                                            <input 
-                                                type="number" 
-                                                value={fracInput.num}
-                                                onChange={e => setFracInput({...fracInput, num: e.target.value})}
-                                                onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                                disabled={isFinished}
-                                                className="text-center text-2xl w-24 px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition shadow-inner"
-                                                placeholder="num"
-                                                autoFocus
-                                            />
-                                            <div className="h-1 w-24 bg-gray-800 rounded"></div>
-                                            <input 
-                                                type="number" 
-                                                value={fracInput.den}
-                                                onChange={e => setFracInput({...fracInput, den: e.target.value})}
-                                                onKeyDown={e => e.key === 'Enter' && !isFinished && checkAnswer()}
-                                                disabled={isFinished}
-                                                className="text-center text-2xl w-24 px-2 py-1 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition shadow-inner"
-                                                placeholder="den"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
+              {/* View: RESULT */}
+              {appState === 'RESULT' && (
+                  <div className="max-w-lg mx-auto bg-white p-10 rounded-3xl shadow-xl text-center animate-in slide-in-from-bottom-8">
+                      <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                          <span className="text-5xl">🎉</span>
+                      </div>
+                      <h2 className="text-3xl font-black text-slate-800 mb-2">Session Complete!</h2>
+                      <p className="text-lg text-slate-600 mb-8 font-medium">Great job, {playerName}!</p>
+                      
+                      <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
+                          <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Final Score</div>
+                          <div className="text-6xl font-black text-blue-600">
+                              {score} <span className="text-3xl text-slate-400">/ {questions.length}</span>
+                          </div>
+                          <div className="mt-4 text-sm font-semibold text-slate-500">
+                              Topic: <span className="capitalize">{selectedCategory}</span> {selectedOperation ? `(${selectedOperation})` : ''}
+                          </div>
+                      </div>
 
-                                {/* Status Messages */}
-                                {quizStatus === 'wrong' && (
-                                    <div className="text-orange-500 font-bold mb-4 animate-bounce">Incorrect. You have 1 try left!</div>
-                                )}
-                                {quizStatus === 'success' && (
-                                    <div className="text-green-500 font-bold text-xl mb-4 bg-green-100 px-6 py-2 rounded-full border border-green-200">Correct! Great job.</div>
-                                )}
-                                {quizStatus === 'failed' && (
-                                    <div className="flex flex-col items-center text-red-500 font-bold mb-4">
-                                        <span className="mb-2">Incorrect. The correct answer is:</span>
-                                        <div className="text-3xl text-gray-800 bg-gray-100 px-6 py-3 rounded-xl border border-gray-300">
-                                            {q.displayAnswer}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                          <button 
+                              onClick={handleStartPractice}
+                              className="flex-1 py-3 px-6 bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold rounded-xl transition flex items-center justify-center"
+                          >
+                              <RotateCcw className="w-5 h-5 mr-2" /> Try Again
+                          </button>
+                          <button 
+                              onClick={() => setAppState('HOME')}
+                              className="flex-1 py-3 px-6 bg-slate-800 text-white hover:bg-slate-900 font-bold rounded-xl transition flex items-center justify-center"
+                          >
+                              <Home className="w-5 h-5 mr-2" /> Home Menu
+                          </button>
+                      </div>
+                  </div>
+              )}
 
-                             {/* Footer Actions */}
-                            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end">
-                                {!isFinished ? (
-                                    <button 
-                                        onClick={checkAnswer}
-                                        className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold shadow hover:bg-blue-700 transition active:scale-95"
-                                    >
-                                        Check Answer
-                                    </button>
-                                ) : (
-                                    <button 
-                                        onClick={nextQuestion}
-                                        className="px-8 py-3 bg-green-600 text-white rounded-xl font-bold shadow hover:bg-green-700 transition active:scale-95"
-                                        autoFocus
-                                    >
-                                        {currentIndex + 1 < questions.length ? 'Next Question' : 'Finish Practice'}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+              {/* View: ADMIN LOGIN */}
+              {appState === 'ADMIN_LOGIN' && (
+                  <div className="max-w-md mx-auto mt-20 bg-white p-8 rounded-2xl shadow-lg border border-slate-100 animate-in fade-in">
+                      <div className="flex justify-center mb-6">
+                          <div className="p-4 bg-red-50 rounded-full">
+                              <ShieldAlert className="w-10 h-10 text-red-500" />
+                          </div>
+                      </div>
+                      <h2 className="text-2xl font-bold text-center mb-6 text-slate-800">Admin Access</h2>
+                      <input 
+                          type="password" 
+                          placeholder="Enter admin password..."
+                          value={adminPassword}
+                          onChange={(e) => setAdminPassword(e.target.value)}
+                          onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                  if (adminPassword === 'Admin1') { setAppState('ADMIN'); setAdminPassword(''); }
+                                  else alert('Incorrect password');
+                              }
+                          }}
+                          className="w-full p-4 mb-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                      <div className="flex gap-4">
+                          <button onClick={() => setAppState('HOME')} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">Cancel</button>
+                          <button 
+                              onClick={() => {
+                                  if (adminPassword === 'Admin1') { setAppState('ADMIN'); setAdminPassword(''); }
+                                  else alert('Incorrect password');
+                              }} 
+                              className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition"
+                          >
+                              Login
+                          </button>
+                      </div>
+                  </div>
+              )}
 
-            if (screen === 'results') {
-                const percentage = Math.round((score / questions.length) * 100);
-                let message = "Keep practicing!";
-                if (percentage >= 90) message = "Outstanding Work!";
-                else if (percentage >= 70) message = "Great Job!";
-                else if (percentage >= 50) message = "Good Effort!";
+              {/* View: ADMIN DASHBOARD */}
+              {appState === 'ADMIN' && (
+                  <div className="bg-white p-8 rounded-2xl shadow-lg border border-slate-100 animate-in fade-in max-w-6xl mx-auto">
+                      <div className="flex justify-between items-center mb-8 border-b pb-4">
+                          <h2 className="text-3xl font-black text-slate-800 flex items-center">
+                              <ShieldAlert className="w-8 h-8 mr-3 text-red-500" />
+                              Admin Dashboard
+                          </h2>
+                          <button onClick={() => setAppState('HOME')} className="flex items-center px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition">
+                              <ArrowLeft className="w-4 h-4 mr-2" /> Back to App
+                          </button>
+                      </div>
 
-                return (
-                    <div className="min-h-screen bg-blue-600 flex items-center justify-center p-4">
-                        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 text-center relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-blue-50 to-white"></div>
-                            <div className="relative z-10">
-                                <h2 className="text-3xl font-bold text-gray-800 mb-2">{message}</h2>
-                                <p className="text-gray-500 mb-8 font-medium">{userName}, here is your result for {topic.label}.</p>
-                                
-                                <div className="mb-10 relative inline-block">
-                                    <svg className="w-40 h-40 transform -rotate-90">
-                                        <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-gray-200" />
-                                        <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="12" fill="transparent" strokeDasharray="440" strokeDashoffset={440 - (440 * percentage) / 100} className={`${percentage >= 70 ? 'text-green-500' : (percentage >= 50 ? 'text-yellow-400' : 'text-red-500')} transition-all duration-1000 ease-out`} />
-                                    </svg>
-                                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                                        <span className="text-4xl font-extrabold text-gray-800">{score}</span>
-                                        <span className="text-sm font-semibold text-gray-400 border-t-2 border-gray-200 pt-1 w-12 text-center mt-1">{questions.length}</span>
-                                    </div>
-                                </div>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left border-collapse">
+                              <thead>
+                                  <tr className="bg-slate-50 text-slate-600 uppercase text-xs font-bold tracking-wider">
+                                      <th className="p-4 border-b">Date</th>
+                                      <th className="p-4 border-b">Student Name</th>
+                                      <th className="p-4 border-b">Category</th>
+                                      <th className="p-4 border-b">Operation</th>
+                                      <th className="p-4 border-b text-center">Score</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                  {leaderboard.length === 0 ? (
+                                      <tr><td colSpan="5" className="p-8 text-center text-slate-500 italic">No records found.</td></tr>
+                                  ) : leaderboard.map(entry => (
+                                      <tr key={entry.id} className="hover:bg-slate-50 transition-colors">
+                                          <td className="p-4 text-sm text-slate-500 whitespace-nowrap">
+                                              {new Date(entry.date).toLocaleString()}
+                                          </td>
+                                          <td className="p-4 font-bold text-slate-800">{entry.playerName}</td>
+                                          <td className="p-4 capitalize text-slate-600">
+                                              <span className="px-2 py-1 bg-slate-100 rounded-md text-xs">{entry.category}</span>
+                                          </td>
+                                          <td className="p-4 capitalize text-slate-600">{entry.operation || '-'}</td>
+                                          <td className="p-4 text-center">
+                                              <div className="inline-flex items-center justify-center px-3 py-1 bg-blue-50 text-blue-700 font-black rounded-full border border-blue-100">
+                                                  {entry.score} / {entry.total}
+                                              </div>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              )}
 
-                                <button 
-                                    onClick={() => setScreen('home')}
-                                    className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:bg-gray-800 transition active:scale-95"
-                                >
-                                    Back to Home
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            if (screen === 'admin_login') {
-                return (
-                    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-                        <form onSubmit={handleAdminLogin} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
-                            <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Admin Access</h2>
-                            <input 
-                                type="password" 
-                                value={adminPass}
-                                onChange={e => setAdminPass(e.target.value)}
-                                placeholder="Enter Password"
-                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none mb-6"
-                                autoFocus
-                            />
-                            <div className="flex gap-3">
-                                <button type="button" onClick={() => setScreen('home')} className="flex-1 py-3 bg-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-300 transition">Cancel</button>
-                                <button type="submit" className="flex-1 py-3 bg-gray-900 text-white font-bold rounded-lg hover:bg-black transition">Login</button>
-                            </div>
-                        </form>
-                    </div>
-                );
-            }
-
-            if (screen === 'admin_dashboard') {
-                return (
-                    <div className="min-h-screen bg-gray-50 flex flex-col">
-                        <div className="bg-gray-900 text-white p-4 shadow-md flex justify-between items-center sticky top-0 z-10">
-                            <h1 className="text-xl font-bold flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                Admin Dashboard
-                            </h1>
-                            <button onClick={() => setScreen('home')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-semibold transition">Back to App</button>
-                        </div>
-                        
-                        <div className="flex-1 p-6 lg:p-10 max-w-6xl mx-auto w-full">
-                            <div className="flex justify-between items-end mb-6">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-gray-800">Student Scores</h2>
-                                    <p className="text-gray-500 text-sm mt-1">Review performance across all topics.</p>
-                                </div>
-                                <button onClick={fetchAdminData} className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 text-sm bg-blue-50 px-3 py-2 rounded">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg> Refresh
-                                </button>
-                            </div>
-
-                            <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
-                                {adminLoading ? (
-                                    <div className="p-10 text-center text-gray-500 font-medium animate-pulse">Loading records...</div>
-                                ) : adminData.length === 0 ? (
-                                    <div className="p-10 text-center text-gray-500 font-medium">No records found.</div>
-                                ) : (
-                                    <div className="overflow-x-auto custom-scrollbar">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="bg-gray-100 text-gray-700 text-sm uppercase tracking-wider">
-                                                    <th className="p-4 font-semibold border-b">Date/Time</th>
-                                                    <th className="p-4 font-semibold border-b">Student Name</th>
-                                                    <th className="p-4 font-semibold border-b">Category / Topic</th>
-                                                    <th className="p-4 font-semibold border-b text-right">Score</th>
-                                                    <th className="p-4 font-semibold border-b text-center">%</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {adminData.map(record => {
-                                                    const date = new Date(record.timestamp);
-                                                    const perc = Math.round((record.score / record.total) * 100);
-                                                    return (
-                                                        <tr key={record.id} className="hover:bg-gray-50 transition">
-                                                            <td className="p-4 text-sm text-gray-500 whitespace-nowrap">
-                                                                {date.toLocaleDateString()} <span className="text-xs">{date.toLocaleTimeString()}</span>
-                                                            </td>
-                                                            <td className="p-4 font-medium text-gray-800">{record.name}</td>
-                                                            <td className="p-4 text-sm text-gray-600">
-                                                                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-semibold">{record.topic}</span>
-                                                            </td>
-                                                            <td className="p-4 text-right font-bold text-gray-700">
-                                                                {record.score} <span className="text-gray-400 font-medium">/ {record.total}</span>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${perc >= 80 ? 'bg-green-100 text-green-800' : (perc >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800')}`}>
-                                                                    {perc}%
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    )
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            return null;
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+          </main>
+      </div>
+  );
+}
