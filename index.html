@@ -1,32 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserCircle, Settings, Play, ShieldAlert, ArrowLeft, CheckCircle2, XCircle, RotateCcw, Home } from 'lucide-react';
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/auth';
-import 'firebase/compat/firestore';
+// import { initializeApp } from 'firebase/app';
+// import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+// import { getFirestore, collection, addDoc, onSnapshot } from 'firebase/firestore';
 
-// --- Firebase Initialization ---
-const firebaseConfig = {
-  apiKey: "AIzaSyDdcqfdQDC92XG3f8VOe8TjkbNMVje2p8E",
-  authDomain: "math1-6e1bf.firebaseapp.com",
-  projectId: "math1-6e1bf",
-  storageBucket: "math1-6e1bf.firebasestorage.app",
-  messagingSenderId: "596735974126",
-  appId: "1:596735974126:web:7393e4da3acf9c3ada31ff"
-};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'math-practice-pro';
+// Fallback to simple local storage if firebase fails to load in this environment.
+// In a real environment, you would use the imports above.
+const useLocalStorage = true;
 
-let app, auth, db;
-try {
-    if (!firebase.apps.length) {
-        app = firebase.initializeApp(firebaseConfig);
-    } else {
-        app = firebase.app();
-    }
-    auth = firebase.auth();
-    db = firebase.firestore();
-} catch (e) {
-    console.error("Failed to initialize Firebase", e);
-}
+// --- Google Apps Script Web App URL ---
+// Paste your deployed Google Apps Script URL here between the quotes
+const GAS_URL = "YOUR_WEB_APP_URL_HERE";
 
 // --- Utility Functions ---
 const gcd = (a, b) => b === 0 ? Math.abs(a) : gcd(b, a % b);
@@ -42,7 +26,6 @@ const generateNumberWithDigits = (digits) => {
 };
 
 // --- Question Generators ---
-
 // Generates Addition/Subtraction for Whole Numbers & Integers with Regrouping Logic
 const generateWholeOrIntegerQuestion = (operation, config, isInteger = false) => {
   let num1, num2;
@@ -303,7 +286,6 @@ const generateQuestions = (category, operation, config, numQuestions) => {
 
 // --- Main Application Component ---
 export default function App() {
-  const [user, setUser] = useState(null);
   const [appState, setAppState] = useState('HOME'); // HOME, CONFIG, PRACTICE, RESULT, ADMIN_LOGIN, ADMIN
   const [playerName, setPlayerName] = useState('');
   
@@ -327,43 +309,17 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState('');
   const [leaderboard, setLeaderboard] = useState([]);
 
-  useEffect(() => {
-    if (!auth) return;
-    
-    const initAuth = async () => {
-        try {
-          // Since we are using a custom Firebase project configuration, 
-          // we bypass the environment's custom token and directly use Anonymous Auth.
-          await auth.signInAnonymously();
-        } catch (err) {
-          console.error("Auth error:", err);
-        }
-    };
-    
-    initAuth();
-    
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      setUser(u);
-    });
-    
-    return () => unsubscribe();
-  }, []);
-
   // Fetch Leaderboard for Admin
   useEffect(() => {
-      if (appState === 'ADMIN' && user && db) {
-          const scoresRef = db.collection(`artifacts/${appId}/public/data/math_scores`);
-          
-          const unsubscribe = scoresRef.onSnapshot((snapshot) => {
-              const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-              // Sort descending by date locally
-              data.sort((a, b) => new Date(b.date) - new Date(a.date));
-              setLeaderboard(data);
-          }, (error) => console.error("Error fetching scores:", error));
-          
-          return () => unsubscribe();
+      if (appState === 'ADMIN') {
+          if (useLocalStorage) {
+             const storedScores = JSON.parse(localStorage.getItem('math_scores') || '[]');
+             // Sort descending by date
+             storedScores.sort((a, b) => new Date(b.date) - new Date(a.date));
+             setLeaderboard(storedScores);
+          }
       }
-  }, [appState, user]);
+  }, [appState]);
 
   const handleStartConfig = (category) => {
       if (!playerName.trim()) {
@@ -445,20 +401,37 @@ export default function App() {
 
   const finishPractice = async () => {
       setAppState('RESULT');
-      // Save to Firebase
-      if (user && db) {
+      
+      const scoreData = {
+          id: Date.now().toString(),
+          playerName,
+          category: selectedCategory,
+          operation: selectedOperation,
+          score,
+          total: questions.length,
+          date: new Date().toISOString()
+      };
+
+      // 1. Save to Local Storage (Fallback for Firebase in this environment)
+      if (useLocalStorage) {
+          const existing = JSON.parse(localStorage.getItem('math_scores') || '[]');
+          existing.push(scoreData);
+          localStorage.setItem('math_scores', JSON.stringify(existing));
+      }
+
+      // 2. Save to Google Apps Script (Google Sheets)
+      if (GAS_URL && GAS_URL !== "YOUR_WEB_APP_URL_HERE") {
           try {
-              const scoresRef = db.collection(`artifacts/${appId}/public/data/math_scores`);
-              await scoresRef.add({
-                  playerName,
-                  category: selectedCategory,
-                  operation: selectedOperation,
-                  score,
-                  total: questions.length,
-                  date: new Date().toISOString()
-              });
+              fetch(GAS_URL, {
+                  method: 'POST',
+                  body: JSON.stringify(scoreData),
+                  headers: {
+                      // Using text/plain helps bypass strict CORS preflight checks for Google Apps Script
+                      'Content-Type': 'text/plain;charset=utf-8',
+                  }
+              }).catch(e => console.error("GAS Network Error:", e));
           } catch (error) {
-              console.error("Error saving score", error);
+              console.error("Error saving score to Google Apps Script", error);
           }
       }
   };
