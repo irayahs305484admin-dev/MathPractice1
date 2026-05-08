@@ -332,11 +332,9 @@ export default function App() {
     
     const initAuth = async () => {
         try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await auth.signInWithCustomToken(__initial_auth_token);
-          } else {
-            await auth.signInAnonymously();
-          }
+          // Since we are using a custom Firebase project configuration, 
+          // we bypass the environment's custom token and directly use Anonymous Auth.
+          await auth.signInAnonymously();
         } catch (err) {
           console.error("Auth error:", err);
         }
